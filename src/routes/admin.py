@@ -64,10 +64,15 @@ def users():
 @login_required
 @admin_required
 def devices():
-    """View all devices across all users."""
+    """View all devices across all users, including unlinked ones."""
     page = request.args.get('page', 1, type=int)
-    devices = Device.query.join(User).filter(Device.is_active == True).order_by(Device.created_at.desc()).paginate(
-        page=page, per_page=20, error_out=False)
+    
+    # Show all devices (both active and inactive/unlinked)
+    devices = Device.query.join(User).order_by(
+        Device.is_active.desc(),  # Show active devices first
+        Device.created_at.desc()
+    ).paginate(page=page, per_page=20, error_out=False)
+    
     return render_template('admin/devices.html', title='All Devices', devices=devices)
 
 
@@ -80,6 +85,45 @@ def unlink_device(device_id):
     device.is_active = False
     db.session.commit()
     flash(f'Device "{device.name}" has been unlinked from user {device.owner.nickname}.', 'success')
+    return redirect(url_for('admin.devices'))
+
+
+@admin_bp.route('/devices/<int:device_id>/relink', methods=['POST'])
+@login_required
+@admin_required
+def relink_device(device_id):
+    """Relink an unlinked device."""
+    device = Device.query.get_or_404(device_id)
+    
+    if device.is_active:
+        flash('Device is already active.', 'info')
+        return redirect(url_for('admin.devices'))
+    
+    device.is_active = True
+    db.session.commit()
+    flash(f'Device "{device.name}" has been relinked to user {device.owner.nickname}.', 'success')
+    return redirect(url_for('admin.devices'))
+
+
+@admin_bp.route('/devices/<int:device_id>/delete-permanently', methods=['POST'])
+@login_required
+@admin_required
+def delete_device_permanently(device_id):
+    """Permanently delete a device from the database."""
+    device = Device.query.get_or_404(device_id)
+    
+    if device.is_active:
+        flash('Cannot permanently delete an active device. Unlink it first.', 'error')
+        return redirect(url_for('admin.devices'))
+    
+    device_name = device.name
+    owner_name = device.owner.nickname
+    
+    # Permanently delete the device
+    db.session.delete(device)
+    db.session.commit()
+    
+    flash(f'Device "{device_name}" has been permanently deleted from user {owner_name}.', 'warning')
     return redirect(url_for('admin.devices'))
 
 
@@ -174,10 +218,13 @@ def sync_management():
 @login_required
 @admin_required
 def sync_devices():
-    """View devices with sync configuration."""
+    """View devices with sync configuration, including unlinked ones."""
     page = request.args.get('page', 1, type=int)
-    devices = Device.query.join(User).filter(Device.is_active == True).order_by(
-        Device.external_device_id.isnot(None).desc(),
+    
+    # Show all devices (both active and inactive) for sync configuration
+    devices = Device.query.join(User).order_by(
+        Device.is_active.desc(),  # Show active devices first
+        Device.external_device_id.isnot(None).desc(),  # Then prioritize devices with sync configured
         Device.created_at.desc()
     ).paginate(page=page, per_page=20, error_out=False)
     

@@ -15,6 +15,11 @@
     <div class="card">
         <div class="card-header">
             <h5 class="mb-0">All Devices ({{ devices.total }} total)</h5>
+            <small class="text-muted">
+                Showing both active and unlinked devices. 
+                <span class="badge bg-success">Active</span> devices are linked to users. 
+                <span class="badge bg-danger">Unlinked</span> devices are soft-deleted.
+            </small>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -24,6 +29,7 @@
                             <th>Device</th>
                             <th>Type</th>
                             <th>Owner</th>
+                            <th>Status</th>
                             <th>Model</th>
                             <th>Registration</th>
                             <th>Serial Number</th>
@@ -33,27 +39,46 @@
                     </thead>
                     <tbody>
                         {% for device in devices.items %}
-                        <tr id="device-row-{{ device.id }}">
+                        <tr id="device-row-{{ device.id }}" {% if not device.is_active %}class="table-secondary"{% endif %}>
                             <td>
                                 <div class="d-flex align-items-center">
-                                    <span class="material-icons me-2 text-primary">
+                                    <span class="material-icons me-2 {% if device.is_active %}text-primary{% else %}text-muted{% endif %}">
                                         {% if device.device_type == 'aircraft' %}flight{% elif device.device_type == 'radio' %}radio{% elif device.device_type == 'gps' %}location_on{% else %}device_hub{% endif %}
                                     </span>
-                                    <strong>{{ device.name }}</strong>
+                                    <div>
+                                        <strong {% if not device.is_active %}class="text-muted"{% endif %}>{{ device.name }}</strong>
+                                        {% if not device.is_active %}
+                                            <br><small class="text-danger">Unlinked</small>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </td>
                             <td>
-                                <span class="badge" style="background: var(--kanardia-orange); color: white;">
+                                <span class="badge" style="background: {% if device.is_active %}var(--kanardia-orange){% else %}#6c757d{% endif %}; color: white;">
                                     {{ device.device_type.title() }}
                                 </span>
                             </td>
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="material-icons me-1 text-muted" style="font-size: 1rem;">person</span>
-                                    {{ device.owner.nickname }}
-                                    <br>
-                                    <small class="text-muted">{{ device.owner.email }}</small>
+                                    <div>
+                                        {{ device.owner.nickname }}
+                                        <br><small class="text-muted">{{ device.owner.email }}</small>
+                                    </div>
                                 </div>
+                            </td>
+                            <td>
+                                {% if device.is_active %}
+                                    <span class="badge bg-success">
+                                        <span class="material-icons me-1" style="font-size: 0.875rem;">link</span>
+                                        Active
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-danger">
+                                        <span class="material-icons me-1" style="font-size: 0.875rem;">link_off</span>
+                                        Unlinked
+                                    </span>
+                                {% endif %}
                             </td>
                             <td>{{ device.model or '-' }}</td>
                             <td>
@@ -73,20 +98,37 @@
                                         <span class="material-icons">more_vert</span>
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end">
-                                        <li>
-                                            <form method="POST" action="{{ url_for('admin.unlink_device', device_id=device.id) }}" class="m-0">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to unlink this device from the user? This action cannot be undone.')">
-                                                    <span class="material-icons me-2">link_off</span> Unlink Device
-                                                </button>
-                                            </form>
-                                        </li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li>
-                                            <a class="dropdown-item text-danger" href="#" onclick="unlinkDeviceAPI({{ device.id }}, '{{ device.name }}', '{{ device.owner.nickname }}')">
-                                                <span class="material-icons me-2">delete</span> Unlink (API)
-                                            </a>
-                                        </li>
+                                        {% if device.is_active %}
+                                            <li>
+                                                <form method="POST" action="{{ url_for('admin.unlink_device', device_id=device.id) }}" class="m-0">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                    <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to unlink this device from the user? This action cannot be undone.')">
+                                                        <span class="material-icons me-2">link_off</span> Unlink Device
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="#" onclick="unlinkDeviceAPI({{ device.id }}, '{{ device.name }}', '{{ device.owner.nickname }}')">
+                                                    <span class="material-icons me-2">delete</span> Unlink (API)
+                                                </a>
+                                            </li>
+                                        {% else %}
+                                            <li>
+                                                <form method="POST" action="{{ url_for('admin.relink_device', device_id=device.id) }}" class="m-0">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                    <button type="submit" class="dropdown-item text-success" onclick="return confirm('Are you sure you want to relink this device?')">
+                                                        <span class="material-icons me-2">link</span> Relink Device
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="#" onclick="deleteDevicePermanently({{ device.id }}, '{{ device.name }}')">
+                                                    <span class="material-icons me-2">delete_forever</span> Delete Permanently
+                                                </a>
+                                            </li>
+                                        {% endif %}
                                     </ul>
                                 </div>
                             </td>
@@ -190,6 +232,44 @@ function unlinkDeviceAPI(deviceId, deviceName, ownerNickname) {
             console.error('Error unlinking device:', error);
             showAlert('error', 'Error unlinking device. Please try again.');
         });
+    }
+}
+
+/**
+ * Permanently delete a device
+ * @param {number} deviceId - The ID of the device to delete
+ * @param {string} deviceName - The name of the device
+ */
+function deleteDevicePermanently(deviceId, deviceName) {
+    if (confirm(`⚠️ PERMANENT DELETION ⚠️\n\nAre you sure you want to PERMANENTLY DELETE "${deviceName}"?\n\nThis action:\n• Cannot be undone\n• Will remove all device data\n• Is irreversible\n\nType "DELETE" to confirm this action.`)) {
+        const confirmation = prompt('Type "DELETE" to confirm permanent deletion:');
+        if (confirmation === 'DELETE') {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            fetch(`/admin/devices/${deviceId}/delete-permanently`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `csrf_token=${csrfToken}`
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Reload the page to reflect changes
+                    location.reload();
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting device permanently:', error);
+                showAlert('error', 'Error deleting device permanently. Please try again.');
+            });
+        } else if (confirmation !== null) {
+            alert('Deletion cancelled. You must type "DELETE" exactly to confirm.');
+        }
     }
 }
 

@@ -32,22 +32,25 @@
                     </thead>
                     <tbody>
                         {% for device in devices.items %}
-                        <tr id="device-row-{{ device.id }}">
+                        <tr id="device-row-{{ device.id }}" {% if not device.is_active %}class="table-secondary"{% endif %}>
                             <td>
                                 <div class="d-flex align-items-center">
-                                    <span class="material-icons me-2 text-primary">
+                                    <span class="material-icons me-2 {% if device.is_active %}text-primary{% else %}text-muted{% endif %}">
                                         {% if device.device_type == 'aircraft' %}flight{% elif device.device_type == 'radio' %}radio{% elif device.device_type == 'gps' %}location_on{% else %}device_hub{% endif %}
                                     </span>
                                     <div>
-                                        <strong>{{ device.name }}</strong>
+                                        <strong {% if not device.is_active %}class="text-muted"{% endif %}>{{ device.name }}</strong>
                                         {% if device.model %}
                                             <br><small class="text-muted">{{ device.model }}</small>
+                                        {% endif %}
+                                        {% if not device.is_active %}
+                                            <br><small class="text-danger">Unlinked</small>
                                         {% endif %}
                                     </div>
                                 </div>
                             </td>
                             <td>
-                                <span class="badge" style="background: var(--kanardia-orange); color: white;">
+                                <span class="badge" style="background: {% if device.is_active %}var(--kanardia-orange){% else %}#6c757d{% endif %}; color: white;">
                                     {{ device.device_type.title() }}
                                 </span>
                             </td>
