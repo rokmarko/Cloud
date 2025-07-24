@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if title %}{{ title }} - KanardiaCloud{% else %}KanardiaCloud{% endif %}</title>
+    
+    <!-- Material Design Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.4.2/mdb.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Google Fonts - Material Design -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        :root {
+            --kanardia-orange: #FF6D00;
+            --kanardia-red: #D84315;
+            --kanardia-dark-orange: #E65100;
+            --kanardia-light-orange: #FFB74D;
+            --material-elevation-1: 0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12);
+            --material-elevation-2: 0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12);
+            --material-elevation-4: 0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12);
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #fafafa;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Custom Navbar */
+        .navbar-kanardia {
+            background: linear-gradient(135deg, var(--kanardia-orange) 0%, var(--kanardia-red) 100%);
+            box-shadow: var(--material-elevation-4);
+            border: none;
+            padding: 0.75rem 0;
+        }
+        
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            font-size: 1.5rem;
+            color: white !important;
+        }
+        
+        .navbar-brand img {
+            height: 32px;
+            margin-right: 12px;
+            filter: brightness(0) invert(1);
+        }
+        
+        /* Material Sidebar */
+        .sidebar {
+            background-color: white;
+            min-height: calc(100vh - 76px);
+            box-shadow: var(--material-elevation-2);
+            border-right: none;
+            padding-top: 1rem;
+        }
+        
+        .sidebar .nav-link {
+            color: #424242;
+            padding: 12px 24px;
+            margin: 4px 16px;
+            border-radius: 8px;
+            font-weight: 400;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        
+        .sidebar .nav-link:hover {
+            background-color: rgba(255, 109, 0, 0.08);
+            color: var(--kanardia-orange);
+            transform: translateX(4px);
+        }
+        
+        .sidebar .nav-link.active {
+            background: linear-gradient(135deg, var(--kanardia-orange), var(--kanardia-red));
+            color: white;
+            box-shadow: var(--material-elevation-2);
+        }
+        
+        .sidebar .nav-link i {
+            margin-right: 16px;
+            font-size: 1.2rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        /* Material Cards */
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: var(--material-elevation-1);
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        
+        .card:hover {
+            box-shadow: var(--material-elevation-4);
+            transform: translateY(-2px);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--kanardia-orange), var(--kanardia-red));
+            color: white;
+            border: none;
+            border-radius: 12px 12px 0 0 !important;
+            padding: 1rem 1.5rem;
+            font-weight: 500;
+        }
+        
+        /* Material Buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--kanardia-orange), var(--kanardia-red));
+            border: none;
+            border-radius: 8px;
+            padding: 10px 24px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: var(--material-elevation-2);
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--kanardia-dark-orange), var(--kanardia-red));
+            box-shadow: var(--material-elevation-4);
+            transform: translateY(-1px);
+        }
+        
+        .btn-outline-primary {
+            color: var(--kanardia-orange);
+            border: 2px solid var(--kanardia-orange);
+            background: transparent;
+            border-radius: 8px;
+            padding: 8px 24px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-outline-primary:hover {
+            background: var(--kanardia-orange);
+            border-color: var(--kanardia-orange);
+            color: white;
+        }
+        
+        /* Material Forms */
+        .form-control {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            transition: all 0.2s ease;
+        }
+        
+        .form-control:focus {
+            border-color: var(--kanardia-orange);
+            box-shadow: 0 0 0 0.2rem rgba(255, 109, 0, 0.25);
+        }
+        
+        .form-label {
+            font-weight: 500;
+            color: #424242;
+            margin-bottom: 8px;
+        }
+        
+        /* Material Alerts */
+        .alert {
+            border: none;
+            border-radius: 8px;
+            padding: 16px 20px;
+            box-shadow: var(--material-elevation-1);
+        }
+        
+        .alert-success {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .alert-danger {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        
+        .alert-warning {
+            background-color: #fff8e1;
+            color: #f57c00;
+        }
+        
+        .alert-info {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        /* Content Wrapper */
+        .content-wrapper {
+            padding: 2rem;
+            background-color: #fafafa;
+            min-height: calc(100vh - 76px);
+        }
+        
+        /* Material Headers */
+        .page-header {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: var(--material-elevation-1);
+        }
+        
+        .page-header h1 {
+            color: #212121;
+            font-weight: 400;
+            margin: 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .page-header h1 i {
+            margin-right: 16px;
+            color: var(--kanardia-orange);
+        }
+        
+        /* Footer */
+        .footer {
+            background: linear-gradient(135deg, var(--kanardia-orange), var(--kanardia-red));
+            color: white;
+            text-align: center;
+            padding: 1.5rem 0;
+            margin-top: auto;
+        }
+        
+        /* Dropdown customization */
+        .dropdown-menu {
+            border: none;
+            border-radius: 8px;
+            box-shadow: var(--material-elevation-4);
+            padding: 8px 0;
+            min-width: 200px;
+            margin-top: 0.125rem;
+        }
+        
+        .dropdown-menu-end {
+            --bs-position: end;
+        }
+        
+        /* Ensure dropdown doesn't overflow viewport */
+        .navbar .dropdown-menu {
+            position: absolute;
+            z-index: 1050;
+        }
+        
+        /* Fix for mobile dropdown positioning */
+        @media (max-width: 991.98px) {
+            .navbar .dropdown-menu {
+                position: static;
+                float: none;
+                width: auto;
+                margin-top: 0;
+                background-color: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+            }
+        }
+        
+        /* Prevent dropdown overflow on right edge */
+        .dropdown-menu.dropdown-menu-end {
+            right: 0;
+            left: auto;
+        }
+        
+        /* Ensure dropdown stays within viewport */
+        .dropdown-menu {
+            max-width: calc(100vw - 2rem);
+            overflow: hidden;
+        }
+        
+        .dropdown-item {
+            padding: 10px 20px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        
+        .dropdown-item:hover {
+            background-color: rgba(255, 109, 0, 0.08);
+            color: var(--kanardia-orange);
+        }
+        
+        /* Custom jumbotron replacement */
+        .hero-section {
+            background: linear-gradient(135deg, var(--kanardia-orange), var(--kanardia-red));
+            color: white;
+            padding: 4rem 2rem;
+            border-radius: 12px;
+            margin-bottom: 3rem;
+            box-shadow: var(--material-elevation-4);
+        }
+        
+        /* Stats cards */
+        .stats-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: var(--material-elevation-1);
+            transition: all 0.2s ease;
+        }
+        
+        .stats-card:hover {
+            box-shadow: var(--material-elevation-4);
+            transform: translateY(-4px);
+        }
+        
+        .stats-number {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: var(--kanardia-orange);
+            margin: 0;
+        }
+        
+        .stats-label {
+            color: #757575;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Clickable cards */
+        .clickable-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .clickable-card:hover {
+            box-shadow: var(--material-elevation-8);
+            transform: translateY(-6px);
+        }
+        
+        /* Ensure links around cards don't change text color */
+        a .stats-number {
+            color: var(--kanardia-orange);
+        }
+        
+        a .stats-label {
+            color: #757575;
+        }
+        
+        a:hover .stats-number {
+            color: var(--kanardia-orange);
+        }
+        
+        a:hover .stats-label {
+            color: #757575;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-kanardia">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <img src="https://www.kanardia.eu/wp-content/themes/kanardia/images/kanardia-logo.png" alt="Kanardia" onerror="this.style.display='none'">
+                <span class="material-icons" style="margin-right: 8px;">flight_takeoff</span>
+                KanardiaCloud
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border: 1px solid rgba(255,255,255,0.3);">
+                <span class="material-icons" style="color: white;">menu</span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: white;">
+                                <span class="material-icons me-2">account_circle</span>
+                                {{ current_user.full_name }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('dashboard.index') }}">
+                                    <span class="material-icons me-2">dashboard</span> Dashboard
+                                </a></li>
+                                {% if current_user.is_admin %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('admin.index') }}">
+                                    <span class="material-icons me-2">admin_panel_settings</span> Admin Panel
+                                </a></li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                                    <span class="material-icons me-2">logout</span> Logout
+                                </a></li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('auth.login') }}" style="color: white;">
+                                <span class="material-icons me-1">login</span> Login
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('auth.register') }}" style="color: white;">
+                                <span class="material-icons me-1">person_add</span> Register
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container-fluid mt-2">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <div class="container-fluid">
+        <div class="row">
+            {% if current_user.is_authenticated %}
+                <!-- Sidebar -->
+                <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                    <div class="position-sticky pt-3">
+                        <ul class="nav flex-column">
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.index') }}">
+                                    <span class="material-icons">dashboard</span> Dashboard
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.devices') %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.devices') }}">
+                                    <span class="material-icons">devices</span> Devices
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.checklists') %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.checklists') }}">
+                                    <span class="material-icons">checklist</span> Checklists
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.approach_charts') %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.approach_charts') }}">
+                                    <span class="material-icons">map</span> Approach Charts
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.logbook') %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.logbook') }}">
+                                    <span class="material-icons">book</span> Logbook
+                                </a>
+                            </li>
+                            {% if current_user.is_admin %}
+                            <li class="nav-item mt-3">
+                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                                    <span>Administration</span>
+                                </h6>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" 
+                                   href="{{ url_for('admin.index') }}">
+                                    <span class="material-icons">admin_panel_settings</span> Admin Panel
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint == 'admin.users' %}active{% endif %}" 
+                                   href="{{ url_for('admin.users') }}">
+                                    <span class="material-icons">people</span> Manage Users
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint == 'admin.devices' %}active{% endif %}" 
+                                   href="{{ url_for('admin.devices') }}">
+                                    <span class="material-icons">devices</span> All Devices
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint in ['admin.sync_management', 'admin.sync_devices'] %}active{% endif %}" 
+                                   href="{{ url_for('admin.sync_management') }}">
+                                    <span class="material-icons">sync</span> ThingsBoard Sync
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </nav>
+            {% endif %}
+            
+            <!-- Main Content Area -->
+            <main class="{% if current_user.is_authenticated %}col-md-9 ms-sm-auto col-lg-10{% else %}col-12{% endif %} px-md-4 content-wrapper">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <span>&copy; 2025 KanardiaCloud. All rights reserved.</span>
+                </div>
+                <div class="col-md-6 text-end">
+                    <span>Powered by <strong>Kanardia</strong></span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Material Design Bootstrap JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.4.2/mdb.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Dropdown positioning fix -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle dropdown positioning to prevent overflow
+            const dropdowns = document.querySelectorAll('.dropdown');
+            
+            dropdowns.forEach(dropdown => {
+                dropdown.addEventListener('shown.bs.dropdown', function() {
+                    const dropdownMenu = this.querySelector('.dropdown-menu');
+                    if (dropdownMenu) {
+                        const rect = dropdownMenu.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        
+                        // If dropdown extends beyond right edge, add dropdown-menu-end class
+                        if (rect.right > viewportWidth - 10) {
+                            dropdownMenu.classList.add('dropdown-menu-end');
+                        }
+                        
+                        // If dropdown extends beyond left edge, remove dropdown-menu-end class
+                        if (rect.left < 10) {
+                            dropdownMenu.classList.remove('dropdown-menu-end');
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

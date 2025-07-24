@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-map"></i> Approach Charts</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-outline-secondary">
+            <i class="bi bi-search"></i> Search Charts
+        </button>
+    </div>
+</div>
+
+<div class="alert alert-info" role="alert">
+    <i class="bi bi-info-circle"></i>
+    <strong>Coming Soon!</strong> Approach charts functionality will be available in a future update.
+    This feature will allow you to access and organize approach charts for airports and navigation procedures.
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="bi bi-map display-4 text-primary mb-3"></i>
+                <h5 class="card-title">ILS Approaches</h5>
+                <p class="card-text">Instrument Landing System approach charts for precision approaches.</p>
+                <button class="btn btn-outline-primary" disabled>Coming Soon</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="bi bi-geo-alt display-4 text-success mb-3"></i>
+                <h5 class="card-title">GPS Approaches</h5>
+                <p class="card-text">Global Positioning System approach procedures and charts.</p>
+                <button class="btn btn-outline-success" disabled>Coming Soon</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="bi bi-broadcast display-4 text-info mb-3"></i>
+                <h5 class="card-title">VOR Approaches</h5>
+                <p class="card-text">VHF Omnidirectional Range approach charts and procedures.</p>
+                <button class="btn btn-outline-info" disabled>Coming Soon</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-lightbulb"></i> What's Coming</h5>
+                <ul class="list-unstyled">
+                    <li><i class="bi bi-check-circle text-success"></i> Search and filter approach charts by airport</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Download and view charts offline</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Organize charts by favorites</li>
+                    <li><i class="bi bi-check-circle text-success"></i> Integration with flight planning</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

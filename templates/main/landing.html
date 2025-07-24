@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="hero-section text-center">
+                <h1 class="display-4 mb-4">
+                    <span class="material-icons" style="font-size: 3rem; vertical-align: middle; margin-right: 16px;">flight_takeoff</span>
+                    Welcome to KanardiaCloud
+                </h1>
+                <p class="lead mb-4">Your comprehensive aviation management platform</p>
+                <hr class="my-4" style="border-color: rgba(255,255,255,0.3);">
+                <p class="mb-4">Manage your devices, checklists, approach charts, and logbook all in one place.</p>
+                <div class="d-flex justify-content-center gap-3 flex-wrap">
+                    <a class="btn btn-light btn-lg" href="{{ url_for('auth.register') }}" role="button">
+                        <span class="material-icons me-2">person_add</span> Get Started
+                    </a>
+                    <a class="btn btn-outline-light btn-lg" href="{{ url_for('auth.login') }}" role="button">
+                        <span class="material-icons me-2">login</span> Sign In
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="card text-center h-100">
+                <div class="card-body p-4">
+                    <span class="material-icons text-primary mb-3" style="font-size: 3rem;">devices</span>
+                    <h5 class="card-title">Device Management</h5>
+                    <p class="card-text text-muted">Track and manage all your aviation devices and equipment in one place.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6">
+            <div class="card text-center h-100">
+                <div class="card-body p-4">
+                    <span class="material-icons mb-3" style="font-size: 3rem; color: #4CAF50;">checklist</span>
+                    <h5 class="card-title">Digital Checklists</h5>
+                    <p class="card-text text-muted">Create and manage comprehensive flight checklists for all phases of flight.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6">
+            <div class="card text-center h-100">
+                <div class="card-body p-4">
+                    <span class="material-icons mb-3" style="font-size: 3rem; color: #2196F3;">map</span>
+                    <h5 class="card-title">Approach Charts</h5>
+                    <p class="card-text text-muted">Access and organize approach charts for airports and navigation procedures.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6">
+            <div class="card text-center h-100">
+                <div class="card-body p-4">
+                    <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">book</span>
+                    <h5 class="card-title">Digital Logbook</h5>
+                    <p class="card-text text-muted">Maintain detailed flight records and track your aviation progress.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center p-5">
+                    <span class="material-icons mb-3" style="font-size: 3rem; color: var(--kanardia-orange);">flight_takeoff</span>
+                    <h5 class="card-title mb-3">Ready to take off?</h5>
+                    <p class="card-text text-muted mb-4">Join KanardiaCloud today and streamline your aviation management.</p>
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg">
+                        <span class="material-icons me-2">person_add</span> Create Your Account
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

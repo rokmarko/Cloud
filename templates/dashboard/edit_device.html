@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons">edit</span> Edit Device</h1>
+    <a href="{{ url_for('dashboard.devices') }}" class="btn btn-outline-secondary">
+        <span class="material-icons me-2">arrow_back</span> Back to Devices
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">edit</span>
+                    Edit Device: {{ device.name }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else "")) }}
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.name.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.device_type.label(class="form-label") }}
+                        {{ form.device_type(class="form-select" + (" is-invalid" if form.device_type.errors else "")) }}
+                        {% if form.device_type.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.device_type.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.model.label(class="form-label") }}
+                        {{ form.model(class="form-control" + (" is-invalid" if form.model.errors else "")) }}
+                        {% if form.model.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.model.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.serial_number.label(class="form-label") }}
+                        {{ form.serial_number(class="form-control" + (" is-invalid" if form.serial_number.errors else "")) }}
+                        {% if form.serial_number.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.serial_number.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.registration.label(class="form-label") }}
+                        {{ form.registration(class="form-control" + (" is-invalid" if form.registration.errors else "")) }}
+                        {% if form.registration.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.registration.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">For aircraft only</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('dashboard.devices') }}" class="btn btn-secondary">
+                            <span class="material-icons me-1">cancel</span> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="material-icons me-1">save</span> Update Device
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Device Information -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">info</span>
+                    Device Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <strong>Created:</strong>
+                        <p class="text-muted">{{ device.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                    </div>
+                    <div class="col-sm-6">
+                        <strong>Device ID:</strong>
+                        <p class="text-muted">#{{ device.id }}</p>
+                    </div>
+                </div>
+                {% if device.serial_number %}
+                <div class="row">
+                    <div class="col-12">
+                        <strong>Current Serial Number:</strong>
+                        <p class="text-muted"><code>{{ device.serial_number }}</code></p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.card-header h5, .card-header h6 {
+    display: flex;
+    align-items: center;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    display: flex;
+    align-items: center;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+}
+</style>
+{% endblock %}

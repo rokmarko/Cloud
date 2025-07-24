@@ -1,0 +1,31 @@
+# Requirements for KanardiaCloud
+# Core Flask dependencies
+Flask>=2.3.0
+Flask-SQLAlchemy>=3.0.0
+Flask-Login>=0.6.0
+Flask-Mail>=0.9.1
+Flask-WTF>=1.1.0
+WTForms>=3.0.0
+Werkzeug>=2.3.0
+
+# Database and migration
+SQLAlchemy>=2.0.0
+
+# Email and validation
+email-validator>=2.0.0
+itsdangerous>=2.1.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Background task scheduling
+APScheduler>=3.10.0
+
+# HTTP requests for external API calls
+requests>=2.31.0
+
+# Development dependencies
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0

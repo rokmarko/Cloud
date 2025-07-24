@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons">dashboard</span> Dashboard</h1>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.logbook') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: var(--kanardia-orange);">flight_takeoff</span>
+                <h2 class="stats-number">{{ "%.1f"|format(total_flight_time) }}</h2>
+                <p class="stats-label">Total Flight Hours</p>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.devices') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: #4CAF50;">devices</span>
+                <h2 class="stats-number">{{ device_count }}</h2>
+                <p class="stats-label">Active Devices</p>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.checklists') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: #2196F3;">checklist</span>
+                <h2 class="stats-number">{{ checklist_count }}</h2>
+                <p class="stats-label">Checklists</p>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.logbook') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">book</span>
+                <h2 class="stats-number">{{ logbook_count }}</h2>
+                <p class="stats-label">Logbook Entries</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">history</span>
+                    Recent Flight Entries
+                </h6>
+                <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-outline-primary btn-sm">
+                    <span class="material-icons me-1">visibility</span> View All
+                </a>
+            </div>
+            <div class="card-body">
+                {% if recent_entries %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Aircraft</th>
+                                    <th>Route</th>
+                                    <th>Flight Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in recent_entries %}
+                                <tr>
+                                    <td>{{ entry.date.strftime('%m/%d/%Y') }}</td>
+                                    <td>
+                                        <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
+                                        {{ entry.aircraft_registration }}
+                                    </td>
+                                    <td>{{ entry.departure_airport }} → {{ entry.arrival_airport }}</td>
+                                    <td>
+                                        <span class="badge" style="background: var(--kanardia-orange); color: white;">
+                                            {{ "%.1f"|format(entry.flight_time) }}h
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <span class="material-icons mb-3" style="font-size: 4rem; color: #e0e0e0;">book</span>
+                        <h6 class="text-muted">No flight entries yet</h6>
+                        <p class="text-muted">
+                            <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="text-decoration-none">
+                                Add your first entry
+                            </a>
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">bolt</span>
+                    Quick Actions
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-3">
+                    <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="btn btn-primary">
+                        <span class="material-icons me-2">add_circle</span> Add Flight Entry
+                    </a>
+                    <a href="{{ url_for('dashboard.add_device') }}" class="btn btn-outline-primary">
+                        <span class="material-icons me-2">add_circle</span> Add Device
+                    </a>
+                    <a href="{{ url_for('dashboard.add_checklist') }}" class="btn btn-outline-primary">
+                        <span class="material-icons me-2">add_circle</span> Create Checklist
+                    </a>
+                    <a href="{{ url_for('dashboard.approach_charts') }}" class="btn btn-outline-primary">
+                        <span class="material-icons me-2">map</span> View Charts
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">waving_hand</span>
+                    Welcome Back
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-3">Welcome back, <strong>{{ current_user.full_name }}</strong>!</p>
+                <p class="text-muted mb-0">
+                    {% if current_user.last_login %}
+                        <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">schedule</span>
+                        Last login: {{ current_user.last_login.strftime('%m/%d/%Y at %I:%M %p') }}
+                    {% else %}
+                        <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">celebration</span>
+                        This is your first login. Welcome to KanardiaCloud!
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

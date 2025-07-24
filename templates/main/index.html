@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-house"></i> Home</h1>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-success" role="alert">
+            <h4 class="alert-heading">Welcome back, {{ current_user.full_name }}!</h4>
+            <p>You are successfully logged in to KanardiaCloud. Use the sidebar navigation to access different features of your aviation management system.</p>
+            <hr>
+            <p class="mb-0">
+                <a href="{{ url_for('dashboard.index') }}" class="btn btn-success">
+                    <i class="bi bi-speedometer2"></i> Go to Dashboard
+                </a>
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-cpu display-4 text-primary mb-3"></i>
+                <h5 class="card-title">Your Devices</h5>
+                <p class="card-text">Manage your aviation equipment and aircraft.</p>
+                <a href="{{ url_for('dashboard.devices') }}" class="btn btn-primary">View Devices</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-check2-square display-4 text-success mb-3"></i>
+                <h5 class="card-title">Your Checklists</h5>
+                <p class="card-text">Access your custom flight checklists.</p>
+                <a href="{{ url_for('dashboard.checklists') }}" class="btn btn-success">View Checklists</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-map display-4 text-info mb-3"></i>
+                <h5 class="card-title">Approach Charts</h5>
+                <p class="card-text">Browse navigation charts and procedures.</p>
+                <a href="{{ url_for('dashboard.approach_charts') }}" class="btn btn-info">View Charts</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-journal-text display-4 text-warning mb-3"></i>
+                <h5 class="card-title">Your Logbook</h5>
+                <p class="card-text">Review your flight records and entries.</p>
+                <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-warning">View Logbook</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

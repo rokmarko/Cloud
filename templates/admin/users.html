@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- CSRF token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="page-header">
+    <h1><span class="material-icons">people</span> Manage Users</h1>
+    <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary">
+        <span class="material-icons me-2">arrow_back</span> Back to Dashboard
+    </a>
+</div>
+
+{% if users.items %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">All Users ({{ users.total }} total)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>User</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Joined</th>
+                            <th>Devices</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users.items %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="material-icons me-2 text-primary">person</span>
+                                    <div>
+                                        <strong>{{ user.nickname }}</strong>
+                                        {% if user.is_admin %}
+                                            <span class="badge bg-warning ms-2">Admin</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ user.email }}</td>
+                            <td>
+                                {% if user.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                                {% if user.is_verified %}
+                                    <span class="badge bg-info">Verified</span>
+                                {% else %}
+                                    <span class="badge bg-warning">Unverified</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.created_at.strftime('%m/%d/%Y') }}</td>
+                            <td>
+                                <span class="badge bg-primary">{{ user.devices.filter_by(is_active=True).count() }}</span>
+                            </td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        <span class="material-icons">more_vert</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        {% if current_user.id != user.id %}
+                                        <li>
+                                            <form method="POST" action="{{ url_for('admin.toggle_admin', user_id=user.id) }}" class="m-0">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit" class="dropdown-item">
+                                                    <span class="material-icons me-2">
+                                                        {% if user.is_admin %}remove_moderator{% else %}admin_panel_settings{% endif %}
+                                                    </span>
+                                                    {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form method="POST" action="{{ url_for('admin.toggle_active', user_id=user.id) }}" class="m-0">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit" class="dropdown-item">
+                                                    <span class="material-icons me-2">
+                                                        {% if user.is_active %}block{% else %}check_circle{% endif %}
+                                                    </span>
+                                                    {% if user.is_active %}Deactivate{% else %}Activate{% endif %}
+                                                </button>
+                                            </form>
+                                        </li>
+                                        {% else %}
+                                        <li>
+                                            <span class="dropdown-item-text text-muted">
+                                                <span class="material-icons me-2">info</span>
+                                                You cannot modify yourself
+                                            </span>
+                                        </li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if users.pages > 1 %}
+    <nav aria-label="Users pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if users.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin.users', page=users.prev_num) }}">
+                        <span class="material-icons">chevron_left</span>
+                    </a>
+                </li>
+            {% endif %}
+            
+            {% for page_num in users.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != users.page %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('admin.users', page=page_num) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% endif %}
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if users.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin.users', page=users.next_num) }}">
+                        <span class="material-icons">chevron_right</span>
+                    </a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+{% else %}
+    <div class="text-center mt-5">
+        <span class="material-icons mb-4" style="font-size: 6rem; color: #e0e0e0;">people</span>
+        <h3 class="text-muted mb-3">No users found</h3>
+    </div>
+{% endif %}
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+.table td {
+    vertical-align: middle;
+}
+</style>
+{% endblock %}

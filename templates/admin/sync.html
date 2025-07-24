@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- CSRF token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="page-header">
+    <h1><span class="material-icons">sync</span> ThingsBoard Sync Management</h1>
+    <div class="btn-group">
+        <a href="{{ url_for('admin.sync_devices') }}" class="btn btn-outline-primary">
+            <span class="material-icons me-2">devices</span> Configure Devices
+        </a>
+        <form method="POST" action="{{ url_for('admin.run_sync_manually') }}" class="d-inline">
+            {{ csrf_token() }}
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Start manual sync now?')">
+                <span class="material-icons me-2">sync</span> Run Sync Now
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Sync Status Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <span class="material-icons mb-3" style="font-size: 3rem; color: var(--kanardia-orange);">devices</span>
+            <h2 class="stats-number">{{ total_devices }}</h2>
+            <p class="stats-label">Total Devices</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <span class="material-icons mb-3" style="font-size: 3rem; color: #4CAF50;">sync</span>
+            <h2 class="stats-number">{{ sync_enabled_devices }}</h2>
+            <p class="stats-label">Sync Enabled</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <span class="material-icons mb-3" style="font-size: 3rem; color: #2196F3;">schedule</span>
+            <h2 class="stats-number" id="next-sync">
+                {% if sync_job and sync_job.next_run_time %}
+                    {{ sync_job.next_run_time.strftime('%H:%M') }}
+                {% else %}
+                    --:--
+                {% endif %}
+            </h2>
+            <p class="stats-label">Next Sync</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <div class="stats-card">
+            <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">trending_up</span>
+            <h2 class="stats-number">{{ recent_entries|length }}</h2>
+            <p class="stats-label">Recent Entries</p>
+        </div>
+    </div>
+</div>
+
+<!-- Sync Job Status -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">info</span>
+                    Sync Job Status
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if sync_job %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Job ID:</strong> {{ sync_job.id }}</p>
+                            <p><strong>Job Name:</strong> {{ sync_job.name }}</p>
+                            <p><strong>Trigger:</strong> Every 5 minutes</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Next Run:</strong> 
+                                {% if sync_job.next_run_time %}
+                                    {{ sync_job.next_run_time.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                {% else %}
+                                    Not scheduled
+                                {% endif %}
+                            </p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge bg-success">Running</span>
+                            </p>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <span class="material-icons me-2">warning</span>
+                        Sync job is not running. Please check the application logs.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">settings</span>
+                    Configuration
+                </h5>
+            </div>
+            <div class="card-body">
+                <p><strong>ThingsBoard Server:</strong><br>
+                   <code>aetos.kanardia.eu:8088</code></p>
+                <p><strong>RPC Method:</strong><br>
+                   <code>syncLog</code></p>
+                <p><strong>Sync Frequency:</strong><br>
+                   Every 5 minutes</p>
+                <p><strong>Timeout:</strong><br>
+                   30 seconds</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Logbook Entries -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">history</span>
+                    Recent Logbook Entries (Last 24 Hours)
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_entries %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Aircraft</th>
+                                    <th>Route</th>
+                                    <th>Flight Time</th>
+                                    <th>User</th>
+                                    <th>Source</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in recent_entries %}
+                                <tr>
+                                    <td>{{ entry.date.strftime('%m/%d/%Y') }}</td>
+                                    <td>
+                                        <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
+                                        {{ entry.aircraft_registration }}
+                                    </td>
+                                    <td>{{ entry.departure_airport }} → {{ entry.arrival_airport }}</td>
+                                    <td>
+                                        <span class="badge" style="background: var(--kanardia-orange); color: white;">
+                                            {{ "%.1f"|format(entry.flight_time) }}h
+                                        </span>
+                                    </td>
+                                    <td>{{ entry.user.nickname }}</td>
+                                    <td>
+                                        {% if 'Synced from ThingsBoard' in (entry.remarks or '') %}
+                                            <span class="badge bg-info">ThingsBoard</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Manual</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ entry.created_at.strftime('%H:%M') }}</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <span class="material-icons mb-3" style="font-size: 4rem; color: #e0e0e0;">history</span>
+                        <h6 class="text-muted">No recent logbook entries</h6>
+                        <p class="text-muted">Entries will appear here after sync operations</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh sync status every 30 seconds
+function updateSyncStatus() {
+    fetch('/admin/api/sync/status')
+        .then(response => response.json())
+        .then(data => {
+            // Update next sync time
+            const nextSyncElement = document.getElementById('next-sync');
+            if (data.next_run && nextSyncElement) {
+                const nextRun = new Date(data.next_run);
+                nextSyncElement.textContent = nextRun.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching sync status:', error);
+        });
+}
+
+// Update every 30 seconds
+setInterval(updateSyncStatus, 30000);
+</script>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.stats-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: var(--material-elevation-1);
+    transition: all 0.2s ease;
+}
+
+.stats-card:hover {
+    box-shadow: var(--material-elevation-4);
+    transform: translateY(-4px);
+}
+
+.stats-number {
+    font-size: 2.5rem;
+    font-weight: 300;
+    color: var(--kanardia-orange);
+    margin: 0;
+}
+
+.stats-label {
+    color: #757575;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+}
+</style>
+{% endblock %}

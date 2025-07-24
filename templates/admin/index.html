@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- CSRF token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="page-header">
+    <h1><span class="material-icons">admin_panel_settings</span> Admin Dashboard</h1>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-3 col-md-6">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <span class="material-icons mb-2" style="font-size: 2.5rem; color: var(--kanardia-orange);">people</span>
+                <h3 class="stats-number">{{ total_users }}</h3>
+                <p class="stats-label">Active Users</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <span class="material-icons mb-2" style="font-size: 2.5rem; color: #4CAF50;">devices</span>
+                <h3 class="stats-number">{{ total_devices }}</h3>
+                <p class="stats-label">Devices</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <span class="material-icons mb-2" style="font-size: 2.5rem; color: #2196F3;">checklist</span>
+                <h3 class="stats-number">{{ total_checklists }}</h3>
+                <p class="stats-label">Checklists</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <span class="material-icons mb-2" style="font-size: 2.5rem; color: #FF9800;">book</span>
+                <h3 class="stats-number">{{ total_logbook_entries }}</h3>
+                <p class="stats-label">Logbook Entries</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><span class="material-icons me-2">settings</span>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-3 flex-wrap">
+                    <a href="{{ url_for('admin.users') }}" class="btn btn-primary">
+                        <span class="material-icons me-2">people</span> Manage Users
+                    </a>
+                    <a href="{{ url_for('admin.devices') }}" class="btn btn-outline-primary">
+                        <span class="material-icons me-2">devices</span> View All Devices
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><span class="material-icons me-2">people</span>Recent Users</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_users %}
+                    <div class="list-group list-group-flush">
+                        {% for user in recent_users %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ user.nickname }}</h6>
+                                <small class="text-muted">{{ user.email }}</small>
+                            </div>
+                            <div class="text-end">
+                                {% if user.is_admin %}
+                                    <span class="badge bg-warning">Admin</span>
+                                {% endif %}
+                                {% if user.is_verified %}
+                                    <span class="badge bg-success">Verified</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Unverified</span>
+                                {% endif %}
+                                <br>
+                                <small class="text-muted">{{ user.created_at.strftime('%m/%d/%Y') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('admin.users') }}" class="btn btn-outline-primary btn-sm">View All Users</a>
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center">No users found.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><span class="material-icons me-2">devices</span>Recent Devices</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_devices %}
+                    <div class="list-group list-group-flush">
+                        {% for device in recent_devices %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ device.name }}</h6>
+                                <small class="text-muted">{{ device.device_type.title() }} - {{ device.owner.nickname }}</small>
+                            </div>
+                            <div class="text-end">
+                                {% if device.registration %}
+                                    <span class="badge bg-info">{{ device.registration }}</span>
+                                {% endif %}
+                                <br>
+                                <small class="text-muted">{{ device.created_at.strftime('%m/%d/%Y') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('admin.devices') }}" class="btn btn-outline-primary btn-sm">View All Devices</a>
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center">No devices found.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stats-card {
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.stats-number {
+    font-size: 2.5rem;
+    font-weight: 300;
+    color: var(--kanardia-orange);
+    margin: 0;
+}
+
+.stats-label {
+    color: #757575;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+</style>
+{% endblock %}
