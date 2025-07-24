@@ -110,3 +110,18 @@ class LogbookEntryForm(FlaskForm):
     landings_night = IntegerField('Night Landings', validators=[Optional()])
     remarks = TextAreaField('Remarks')
     submit = SubmitField('Save Entry')
+
+
+class InitialLogbookTimeForm(FlaskForm):
+    """Initial logbook time form."""
+    effective_date = DateField('Effective Date', validators=[DataRequired()], 
+                               description='Entries before this date will not be counted in totals')
+    total_time = FloatField('Total Flight Time (hours)', validators=[DataRequired()], default=0.0)
+    pilot_in_command_time = FloatField('Pilot in Command Time (hours)', validators=[Optional()], default=0.0)
+    dual_time = FloatField('Dual Instruction Time (hours)', validators=[Optional()], default=0.0)
+    instrument_time = FloatField('Instrument Time (hours)', validators=[Optional()], default=0.0)
+    night_time = FloatField('Night Time (hours)', validators=[Optional()], default=0.0)
+    cross_country_time = FloatField('Cross Country Time (hours)', validators=[Optional()], default=0.0)
+    total_landings = IntegerField('Total Landings', validators=[Optional()], default=0)
+    notes = TextAreaField('Notes', description='Optional notes about your previous flight experience')
+    submit = SubmitField('Set Initial Times')

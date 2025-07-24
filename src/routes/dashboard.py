@@ -5,11 +5,92 @@ Dashboard and application feature routes
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from src.app import db
-from src.models import Device, Checklist, ApproachChart, LogbookEntry
-from src.forms import DeviceForm, ChecklistForm, LogbookEntryForm
+from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime
+from src.forms import DeviceForm, ChecklistForm, LogbookEntryForm, InitialLogbookTimeForm
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+
+def calculate_logbook_totals(user_id):
+    """Calculate logbook totals including initial times and filtering by effective date."""
+    # Get initial logbook time if it exists
+    initial_time = InitialLogbookTime.query.filter_by(user_id=user_id).first()
+    
+    # Calculate sums from logbook entries
+    if initial_time:
+        # Only count entries after the effective date
+        entry_totals = {
+            'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).scalar() or 0,
+            'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).scalar() or 0,
+            'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).scalar() or 0,
+            'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).scalar() or 0,
+            'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).scalar() or 0,
+            'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).scalar() or 0,
+            'total_landings': (
+                db.session.query(
+                    db.func.sum(LogbookEntry.landings_day + LogbookEntry.landings_night)
+                ).filter(
+                    LogbookEntry.user_id == user_id,
+                    LogbookEntry.date >= initial_time.effective_date
+                ).scalar() or 0
+            ),
+        }
+        
+        # Add initial times
+        totals = {
+            'total_time': entry_totals['total_time'] + initial_time.total_time,
+            'pic_time': entry_totals['pic_time'] + initial_time.pilot_in_command_time,
+            'dual_time': entry_totals['dual_time'] + initial_time.dual_time,
+            'instrument_time': entry_totals['instrument_time'] + initial_time.instrument_time,
+            'night_time': entry_totals['night_time'] + initial_time.night_time,
+            'cross_country_time': entry_totals['cross_country_time'] + initial_time.cross_country_time,
+            'total_landings': entry_totals['total_landings'] + initial_time.total_landings,
+            'has_initial_time': True,
+            'initial_time': initial_time,
+            'entries_count': LogbookEntry.query.filter(
+                LogbookEntry.user_id == user_id,
+                LogbookEntry.date >= initial_time.effective_date
+            ).count()
+        }
+    else:
+        # Count all entries
+        totals = {
+            'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter_by(user_id=user_id).scalar() or 0,
+            'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter_by(user_id=user_id).scalar() or 0,
+            'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter_by(user_id=user_id).scalar() or 0,
+            'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter_by(user_id=user_id).scalar() or 0,
+            'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter_by(user_id=user_id).scalar() or 0,
+            'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter_by(user_id=user_id).scalar() or 0,
+            'total_landings': (
+                db.session.query(
+                    db.func.sum(LogbookEntry.landings_day + LogbookEntry.landings_night)
+                ).filter_by(user_id=user_id).scalar() or 0
+            ),
+            'has_initial_time': False,
+            'initial_time': None,
+            'entries_count': LogbookEntry.query.filter_by(user_id=user_id).count()
+        }
+    
+    return totals
 
 
 @dashboard_bp.route('/')
@@ -25,9 +106,9 @@ def index():
     recent_entries = LogbookEntry.query.filter_by(user_id=current_user.id)\
         .order_by(LogbookEntry.date.desc()).limit(5).all()
     
-    # Calculate total flight time
-    total_flight_time = db.session.query(db.func.sum(LogbookEntry.flight_time))\
-        .filter_by(user_id=current_user.id).scalar() or 0
+    # Calculate total flight time using new function
+    totals = calculate_logbook_totals(current_user.id)
+    total_flight_time = totals['total_time']
     
     return render_template('dashboard/index.html', 
                          title='Dashboard',
@@ -35,7 +116,8 @@ def index():
                          checklist_count=checklist_count,
                          logbook_count=logbook_count,
                          recent_entries=recent_entries,
-                         total_flight_time=total_flight_time)
+                         total_flight_time=total_flight_time,
+                         totals=totals)
 
 
 @dashboard_bp.route('/devices')
@@ -208,15 +290,8 @@ def logbook():
         .order_by(LogbookEntry.date.desc())\
         .paginate(page=page, per_page=per_page, error_out=False)
     
-    # Calculate totals
-    totals = {
-        'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter_by(user_id=current_user.id).scalar() or 0,
-        'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter_by(user_id=current_user.id).scalar() or 0,
-        'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter_by(user_id=current_user.id).scalar() or 0,
-        'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter_by(user_id=current_user.id).scalar() or 0,
-        'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter_by(user_id=current_user.id).scalar() or 0,
-        'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter_by(user_id=current_user.id).scalar() or 0,
-    }
+    # Calculate totals using new function
+    totals = calculate_logbook_totals(current_user.id)
     
     return render_template('dashboard/logbook.html', 
                          title='Logbook', 
@@ -253,6 +328,81 @@ def add_logbook_entry():
         return redirect(url_for('dashboard.logbook'))
     
     return render_template('dashboard/add_logbook_entry.html', title='Add Logbook Entry', form=form)
+
+
+@dashboard_bp.route('/logbook/initial-time', methods=['GET', 'POST'])
+@login_required
+def initial_logbook_time():
+    """Set or edit initial logbook time."""
+    form = InitialLogbookTimeForm()
+    
+    # Check if user already has initial time set
+    existing_initial = InitialLogbookTime.query.filter_by(user_id=current_user.id).first()
+    
+    if request.method == 'GET' and existing_initial:
+        # Pre-populate form with existing data
+        form.effective_date.data = existing_initial.effective_date
+        form.total_time.data = existing_initial.total_time
+        form.pilot_in_command_time.data = existing_initial.pilot_in_command_time
+        form.dual_time.data = existing_initial.dual_time
+        form.instrument_time.data = existing_initial.instrument_time
+        form.night_time.data = existing_initial.night_time
+        form.cross_country_time.data = existing_initial.cross_country_time
+        form.total_landings.data = existing_initial.total_landings
+        form.notes.data = existing_initial.notes
+    
+    if form.validate_on_submit():
+        if existing_initial:
+            # Update existing record
+            existing_initial.effective_date = form.effective_date.data
+            existing_initial.total_time = form.total_time.data
+            existing_initial.pilot_in_command_time = form.pilot_in_command_time.data or 0
+            existing_initial.dual_time = form.dual_time.data or 0
+            existing_initial.instrument_time = form.instrument_time.data or 0
+            existing_initial.night_time = form.night_time.data or 0
+            existing_initial.cross_country_time = form.cross_country_time.data or 0
+            existing_initial.total_landings = form.total_landings.data or 0
+            existing_initial.notes = form.notes.data
+            flash('Initial logbook time updated successfully!', 'success')
+        else:
+            # Create new record
+            initial_time = InitialLogbookTime(
+                effective_date=form.effective_date.data,
+                total_time=form.total_time.data,
+                pilot_in_command_time=form.pilot_in_command_time.data or 0,
+                dual_time=form.dual_time.data or 0,
+                instrument_time=form.instrument_time.data or 0,
+                night_time=form.night_time.data or 0,
+                cross_country_time=form.cross_country_time.data or 0,
+                total_landings=form.total_landings.data or 0,
+                notes=form.notes.data,
+                user_id=current_user.id
+            )
+            db.session.add(initial_time)
+            flash('Initial logbook time set successfully!', 'success')
+        
+        db.session.commit()
+        return redirect(url_for('dashboard.logbook'))
+    
+    return render_template('dashboard/initial_logbook_time.html', 
+                         title='Set Initial Logbook Time', 
+                         form=form, 
+                         existing_initial=existing_initial)
+
+
+@dashboard_bp.route('/logbook/initial-time/delete', methods=['POST'])
+@login_required
+def delete_initial_logbook_time():
+    """Delete initial logbook time."""
+    initial_time = InitialLogbookTime.query.filter_by(user_id=current_user.id).first()
+    if initial_time:
+        db.session.delete(initial_time)
+        db.session.commit()
+        flash('Initial logbook time removed successfully!', 'success')
+    else:
+        flash('No initial logbook time found to delete.', 'error')
+    
+    return redirect(url_for('dashboard.logbook'))
 
 
 # API Endpoints for Checklist Editor Integration

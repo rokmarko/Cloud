@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <span class="material-icons me-2">schedule</span>
+        {{ "Update" if existing_initial else "Set" }} Initial Logbook Time
+    </h1>
+    <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-outline-secondary">
+        <span class="material-icons me-2">arrow_back</span> Back to Logbook
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">access_time</span>
+                    Initial Flight Time Entry
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="alert alert-info">
+                        <span class="material-icons me-2">info</span>
+                        <strong>Important:</strong> This sets your starting flight hours and establishes a cutoff date. 
+                        Only logbook entries on or after the effective date will be counted in your cumulative totals.
+                    </div>
+                    
+                    <div class="mb-4">
+                        {{ form.effective_date.label(class="form-label") }}
+                        {{ form.effective_date(class="form-control" + (" is-invalid" if form.effective_date.errors else "")) }}
+                        {% if form.effective_date.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.effective_date.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">{{ form.effective_date.description }}</div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h6 class="mb-3">
+                        <span class="material-icons me-2">flight</span>
+                        Flight Times (hours)
+                    </h6>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.total_time.label(class="form-label") }}
+                            {{ form.total_time(class="form-control" + (" is-invalid" if form.total_time.errors else ""), step="0.1") }}
+                            {% if form.total_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.total_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.pilot_in_command_time.label(class="form-label") }}
+                            {{ form.pilot_in_command_time(class="form-control" + (" is-invalid" if form.pilot_in_command_time.errors else ""), step="0.1") }}
+                            {% if form.pilot_in_command_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.pilot_in_command_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.dual_time.label(class="form-label") }}
+                            {{ form.dual_time(class="form-control" + (" is-invalid" if form.dual_time.errors else ""), step="0.1") }}
+                            {% if form.dual_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.dual_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.instrument_time.label(class="form-label") }}
+                            {{ form.instrument_time(class="form-control" + (" is-invalid" if form.instrument_time.errors else ""), step="0.1") }}
+                            {% if form.instrument_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.instrument_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.night_time.label(class="form-label") }}
+                            {{ form.night_time(class="form-control" + (" is-invalid" if form.night_time.errors else ""), step="0.1") }}
+                            {% if form.night_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.night_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.cross_country_time.label(class="form-label") }}
+                            {{ form.cross_country_time(class="form-control" + (" is-invalid" if form.cross_country_time.errors else ""), step="0.1") }}
+                            {% if form.cross_country_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.cross_country_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="mb-4">
+                        {{ form.total_landings.label(class="form-label") }}
+                        {{ form.total_landings(class="form-control" + (" is-invalid" if form.total_landings.errors else "")) }}
+                        {% if form.total_landings.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.total_landings.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-4">
+                        {{ form.notes.label(class="form-label") }}
+                        {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else ""), rows="3", placeholder="Optional notes about your previous flight experience...") }}
+                        {% if form.notes.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.notes.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">{{ form.notes.description }}</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-secondary">
+                            <span class="material-icons me-1">cancel</span> Cancel
+                        </a>
+                        <div>
+                            {% if existing_initial %}
+                                <button type="button" class="btn btn-outline-danger me-2" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                                    <span class="material-icons me-1">delete</span> Remove Initial Time
+                                </button>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">
+                                <span class="material-icons me-1">save</span> {{ "Update" if existing_initial else "Set" }} Initial Time
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">help</span>
+                    How This Works
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-3">
+                        <span class="material-icons me-2 text-primary" style="font-size: 1.2rem; vertical-align: middle;">date_range</span>
+                        <strong>Effective Date:</strong> Sets the starting point for your digital logbook
+                    </li>
+                    <li class="mb-3">
+                        <span class="material-icons me-2 text-success" style="font-size: 1.2rem; vertical-align: middle;">access_time</span>
+                        <strong>Initial Times:</strong> Your accumulated flight hours before starting this digital logbook
+                    </li>
+                    <li class="mb-3">
+                        <span class="material-icons me-2 text-warning" style="font-size: 1.2rem; vertical-align: middle;">calculate</span>
+                        <strong>Totals:</strong> Will include initial times plus entries after the effective date
+                    </li>
+                    <li class="mb-0">
+                        <span class="material-icons me-2 text-info" style="font-size: 1.2rem; vertical-align: middle;">filter_list</span>
+                        <strong>Filtering:</strong> Entries before the effective date won't count in totals
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">lightbulb</span>
+                    Tips
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Use this when switching from paper to digital logbook
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Total time should be your cumulative flight hours
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Set effective date to when you start digital logging
+                    </li>
+                    <li class="mb-0">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        All times should be in decimal hours (e.g., 1.5 for 1h 30m)
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        {% if existing_initial %}
+        <div class="card mt-4 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">warning</span>
+                    Current Settings
+                </h6>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Effective Date:</dt>
+                    <dd class="col-sm-7">{{ existing_initial.effective_date.strftime('%B %d, %Y') }}</dd>
+                    
+                    <dt class="col-sm-5">Total Time:</dt>
+                    <dd class="col-sm-7">{{ "%.1f"|format(existing_initial.total_time) }} hrs</dd>
+                    
+                    <dt class="col-sm-5">PIC Time:</dt>
+                    <dd class="col-sm-7">{{ "%.1f"|format(existing_initial.pilot_in_command_time) }} hrs</dd>
+                </dl>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+{% if existing_initial %}
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">warning</span>
+                    Remove Initial Logbook Time
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to remove your initial logbook time settings?</p>
+                <p class="text-warning">
+                    <span class="material-icons me-2">warning</span>
+                    This will cause your logbook totals to only include entries you've logged digitally.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('dashboard.delete_initial_logbook_time') }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">
+                        <span class="material-icons me-1">delete</span> Remove
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+</style>
+{% endblock %}

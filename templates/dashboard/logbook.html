@@ -3,9 +3,15 @@
 {% block content %}
 <div class="page-header">
     <h1><span class="material-icons">book</span> Flight Logbook</h1>
-    <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="btn btn-primary">
-        <span class="material-icons me-2">add_circle</span> Add Flight Entry
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.initial_logbook_time') }}" class="btn btn-outline-secondary">
+            <span class="material-icons me-2">schedule</span> 
+            {{ "Edit" if totals.has_initial_time else "Set" }} Initial Time
+        </a>
+        <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="btn btn-primary">
+            <span class="material-icons me-2">add_circle</span> Add Flight Entry
+        </a>
+    </div>
 </div>
 
 <!-- Totals Summary -->
@@ -58,6 +64,47 @@
         </div>
     </div>
 </div>
+
+<!-- Initial Time Information -->
+{% if totals.has_initial_time %}
+<div class="alert alert-info mb-4">
+    <div class="d-flex align-items-center">
+        <span class="material-icons me-3" style="font-size: 2rem;">schedule</span>
+        <div class="flex-grow-1">
+            <h6 class="mb-1">Initial Logbook Time Set</h6>
+            <p class="mb-1">
+                <strong>Effective Date:</strong> {{ totals.initial_time.effective_date.strftime('%B %d, %Y') }} 
+                <span class="text-muted">|</span>
+                <strong>Initial Total:</strong> {{ "%.1f"|format(totals.initial_time.total_time) }} hours
+            </p>
+            <small class="text-muted">
+                Totals above include {{ "%.1f"|format(totals.initial_time.total_time) }} hours from before the effective date.
+                Only entries on or after {{ totals.initial_time.effective_date.strftime('%m/%d/%Y') }} are counted.
+            </small>
+        </div>
+        <a href="{{ url_for('dashboard.initial_logbook_time') }}" class="btn btn-outline-primary btn-sm">
+            <span class="material-icons me-1">edit</span> Edit
+        </a>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-warning mb-4">
+    <div class="d-flex align-items-center">
+        <span class="material-icons me-3" style="font-size: 2rem;">warning</span>
+        <div class="flex-grow-1">
+            <h6 class="mb-1">No Initial Time Set</h6>
+            <p class="mb-0">
+                <small class="text-muted">
+                    If you have previous flight experience, you can set initial logbook time to include your existing hours.
+                </small>
+            </p>
+        </div>
+        <a href="{{ url_for('dashboard.initial_logbook_time') }}" class="btn btn-warning btn-sm">
+            <span class="material-icons me-1">schedule</span> Set Initial Time
+        </a>
+    </div>
+</div>
+{% endif %}
 
 <!-- Logbook Entries -->
 {% if entries.items %}

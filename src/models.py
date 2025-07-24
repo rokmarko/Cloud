@@ -26,6 +26,7 @@ class User(UserMixin, db.Model):
     devices = db.relationship('Device', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
     checklists = db.relationship('Checklist', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
     logbook_entries = db.relationship('LogbookEntry', backref='pilot', lazy='dynamic', cascade='all, delete-orphan')
+    initial_logbook_time = db.relationship('InitialLogbookTime', backref='pilot', uselist=False, cascade='all, delete-orphan')
     
     def set_password(self, password: str) -> None:
         """Set password hash."""
@@ -151,3 +152,26 @@ class LogbookEntry(db.Model):
     
     def __repr__(self):
         return f'<LogbookEntry {self.date} {self.aircraft_registration}>'
+
+
+class InitialLogbookTime(db.Model):
+    """Initial logbook time model for setting starting hours."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    effective_date = db.Column(db.Date, nullable=False)
+    total_time = db.Column(db.Float, default=0.0)
+    pilot_in_command_time = db.Column(db.Float, default=0.0)
+    dual_time = db.Column(db.Float, default=0.0)
+    instrument_time = db.Column(db.Float, default=0.0)
+    night_time = db.Column(db.Float, default=0.0)
+    cross_country_time = db.Column(db.Float, default=0.0)
+    total_landings = db.Column(db.Integer, default=0)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Foreign keys
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<InitialLogbookTime {self.user_id} {self.effective_date}>'

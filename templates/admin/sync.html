@@ -162,7 +162,7 @@
                                             {{ "%.1f"|format(entry.flight_time) }}h
                                         </span>
                                     </td>
-                                    <td>{{ entry.user.nickname }}</td>
+                                    <td>{{ entry.pilot.nickname }}</td>
                                     <td>
                                         {% if 'Synced from ThingsBoard' in (entry.remarks or '') %}
                                             <span class="badge bg-info">ThingsBoard</span>
