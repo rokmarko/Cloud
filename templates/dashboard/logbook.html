@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons">book</span> Flight Logbook</h1>
+    <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="btn btn-primary">
+        <span class="material-icons me-2">add_circle</span> Add Flight Entry
+    </a>
+</div>
+
+<!-- Totals Summary -->
+<div class="row g-4 mb-4">
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stats-card">
+            <span class="material-icons mb-2" style="font-size: 2rem; color: var(--kanardia-orange);">flight_takeoff</span>
+            <h4 class="stats-number">{{ "%.1f"|format(totals.total_time) }}</h4>
+            <p class="stats-label">Total Time</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stats-card">
+            <span class="material-icons mb-2" style="font-size: 2rem; color: #4CAF50;">person</span>
+            <h4 class="stats-number">{{ "%.1f"|format(totals.pic_time) }}</h4>
+            <p class="stats-label">PIC Time</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stats-card">
+            <span class="material-icons mb-2" style="font-size: 2rem; color: #2196F3;">school</span>
+            <h4 class="stats-number">{{ "%.1f"|format(totals.dual_time) }}</h4>
+            <p class="stats-label">Dual Time</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stats-card">
+            <span class="material-icons mb-2" style="font-size: 2rem; color: #FF9800;">nights_stay</span>
+            <h4 class="stats-number">{{ "%.1f"|format(totals.night_time) }}</h4>
+            <p class="stats-label">Night Time</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stats-card">
+            <span class="material-icons mb-2" style="font-size: 2rem; color: #9C27B0;">flight</span>
+            <h4 class="stats-number">{{ "%.1f"|format(totals.instrument_time) }}</h4>
+            <p class="stats-label">Instrument</p>
+        </div>
+    </div>
+    
+    <div class="col-xl-2 col-md-4 col-sm-6">
+        <div class="stats-card">
+            <span class="material-icons mb-2" style="font-size: 2rem; color: #795548;">explore</span>
+            <h4 class="stats-number">{{ "%.1f"|format(totals.cross_country_time) }}</h4>
+            <p class="stats-label">Cross Country</p>
+        </div>
+    </div>
+</div>
+
+<!-- Logbook Entries -->
+{% if entries.items %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Flight Entries ({{ entries.total }} total)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Aircraft</th>
+                            <th>Type</th>
+                            <th>Route</th>
+                            <th>Flight Time</th>
+                            <th>PIC</th>
+                            <th>Dual</th>
+                            <th>Night</th>
+                            <th>Instrument</th>
+                            <th>Landings</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries.items %}
+                        <tr>
+                            <td>
+                                <strong>{{ entry.date.strftime('%m/%d/%Y') }}</strong>
+                            </td>
+                            <td>
+                                <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
+                                <strong>{{ entry.aircraft_registration }}</strong>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ entry.aircraft_type }}</span>
+                            </td>
+                            <td>
+                                <span class="text-primary">{{ entry.departure_airport }}</span>
+                                <span class="material-icons mx-1" style="font-size: 0.8rem; vertical-align: middle;">arrow_forward</span>
+                                <span class="text-success">{{ entry.arrival_airport }}</span>
+                            </td>
+                            <td>
+                                <span class="badge" style="background: var(--kanardia-orange); color: white;">
+                                    {{ "%.1f"|format(entry.flight_time) }}h
+                                </span>
+                            </td>
+                            <td>
+                                {% if entry.pilot_in_command_time > 0 %}
+                                    <span class="badge bg-success">{{ "%.1f"|format(entry.pilot_in_command_time) }}h</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entry.dual_time > 0 %}
+                                    <span class="badge bg-primary">{{ "%.1f"|format(entry.dual_time) }}h</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entry.night_time > 0 %}
+                                    <span class="badge bg-dark">{{ "%.1f"|format(entry.night_time) }}h</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entry.instrument_time > 0 %}
+                                    <span class="badge bg-info">{{ "%.1f"|format(entry.instrument_time) }}h</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entry.landings_day > 0 or entry.landings_night > 0 %}
+                                    <small>
+                                        {% if entry.landings_day > 0 %}
+                                            <span class="text-warning">☀ {{ entry.landings_day }}</span>
+                                        {% endif %}
+                                        {% if entry.landings_night > 0 %}
+                                            <span class="text-primary">🌙 {{ entry.landings_night }}</span>
+                                        {% endif %}
+                                    </small>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entry.remarks %}
+                                    <small class="text-muted">
+                                        {{ entry.remarks[:50] }}{% if entry.remarks|length > 50 %}...{% endif %}
+                                    </small>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if entries.pages > 1 %}
+    <nav aria-label="Logbook pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if entries.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('dashboard.logbook', page=entries.prev_num) }}">
+                        <span class="material-icons">chevron_left</span>
+                    </a>
+                </li>
+            {% endif %}
+            
+            {% for page_num in entries.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != entries.page %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('dashboard.logbook', page=page_num) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% endif %}
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if entries.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('dashboard.logbook', page=entries.next_num) }}">
+                        <span class="material-icons">chevron_right</span>
+                    </a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+{% else %}
+    <div class="text-center mt-5">
+        <span class="material-icons mb-4" style="font-size: 6rem; color: #e0e0e0;">book</span>
+        <h3 class="text-muted mb-3">No flight entries yet</h3>
+        <p class="text-muted mb-4">Start building your digital logbook by adding your first flight.</p>
+        <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="btn btn-primary btn-lg">
+            <span class="material-icons me-2">add_circle</span> Add Your First Flight
+        </a>
+    </div>
+{% endif %}
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.stats-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.stats-number {
+    font-size: 1.8rem;
+    font-weight: 300;
+    color: var(--kanardia-orange);
+    margin: 0;
+}
+
+.stats-label {
+    color: #757575;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.table td {
+    vertical-align: middle;
+    font-size: 0.875rem;
+}
+
+.table tr {
+    transition: all 0.3s ease;
+}
+
+.table tr:hover {
+    background-color: rgba(var(--kanardia-orange-rgb), 0.05);
+}
+
+@media (max-width: 768px) {
+    .table-responsive {
+        font-size: 0.75rem;
+    }
+    
+    .stats-card {
+        padding: 1rem;
+    }
+    
+    .stats-number {
+        font-size: 1.5rem;
+    }
+}
+</style>
+{% endblock %}

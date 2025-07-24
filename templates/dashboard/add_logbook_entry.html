@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons me-2">add_circle</span> Add Flight Entry</h1>
+    <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-outline-secondary">
+        <span class="material-icons me-2">arrow_back</span> Back to Logbook
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">flight_takeoff</span>
+                    Flight Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.date.label(class="form-label") }}
+                            {{ form.date(class="form-control" + (" is-invalid" if form.date.errors else "")) }}
+                            {% if form.date.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.date.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.aircraft_type.label(class="form-label") }}
+                            {{ form.aircraft_type(class="form-control" + (" is-invalid" if form.aircraft_type.errors else "")) }}
+                            {% if form.aircraft_type.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.aircraft_type.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.aircraft_registration.label(class="form-label") }}
+                        {{ form.aircraft_registration(class="form-control" + (" is-invalid" if form.aircraft_registration.errors else "")) }}
+                        {% if form.aircraft_registration.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.aircraft_registration.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.departure_airport.label(class="form-label") }}
+                            {{ form.departure_airport(class="form-control" + (" is-invalid" if form.departure_airport.errors else "")) }}
+                            {% if form.departure_airport.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.departure_airport.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.arrival_airport.label(class="form-label") }}
+                            {{ form.arrival_airport(class="form-control" + (" is-invalid" if form.arrival_airport.errors else "")) }}
+                            {% if form.arrival_airport.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.arrival_airport.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h6 class="mb-3">
+                        <span class="material-icons me-2">schedule</span>
+                        Flight Times (hours)
+                    </h6>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.flight_time.label(class="form-label") }}
+                            {{ form.flight_time(class="form-control" + (" is-invalid" if form.flight_time.errors else ""), step="0.1") }}
+                            {% if form.flight_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.flight_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.pilot_in_command_time.label(class="form-label") }}
+                            {{ form.pilot_in_command_time(class="form-control" + (" is-invalid" if form.pilot_in_command_time.errors else ""), step="0.1") }}
+                            {% if form.pilot_in_command_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.pilot_in_command_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.dual_time.label(class="form-label") }}
+                            {{ form.dual_time(class="form-control" + (" is-invalid" if form.dual_time.errors else ""), step="0.1") }}
+                            {% if form.dual_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.dual_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.instrument_time.label(class="form-label") }}
+                            {{ form.instrument_time(class="form-control" + (" is-invalid" if form.instrument_time.errors else ""), step="0.1") }}
+                            {% if form.instrument_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.instrument_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.night_time.label(class="form-label") }}
+                            {{ form.night_time(class="form-control" + (" is-invalid" if form.night_time.errors else ""), step="0.1") }}
+                            {% if form.night_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.night_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.cross_country_time.label(class="form-label") }}
+                            {{ form.cross_country_time(class="form-control" + (" is-invalid" if form.cross_country_time.errors else ""), step="0.1") }}
+                            {% if form.cross_country_time.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.cross_country_time.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h6 class="mb-3">
+                        <span class="material-icons me-2">flight_land</span>
+                        Landings
+                    </h6>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            {{ form.landings_day.label(class="form-label") }}
+                            {{ form.landings_day(class="form-control" + (" is-invalid" if form.landings_day.errors else "")) }}
+                            {% if form.landings_day.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.landings_day.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.landings_night.label(class="form-label") }}
+                            {{ form.landings_night(class="form-control" + (" is-invalid" if form.landings_night.errors else "")) }}
+                            {% if form.landings_night.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.landings_night.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="mb-4">
+                        {{ form.remarks.label(class="form-label") }}
+                        {{ form.remarks(class="form-control" + (" is-invalid" if form.remarks.errors else ""), rows="3", placeholder="Optional notes about the flight...") }}
+                        {% if form.remarks.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.remarks.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-secondary">
+                            <span class="material-icons me-1">cancel</span> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="material-icons me-1">save</span> Add Flight Entry
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><span class="material-icons me-2">lightbulb</span> Tips</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Use ICAO airport codes (e.g., KJFK, EGLL)
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Flight time should be total block time
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        PIC time = time as pilot in command
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Dual time = time with instructor
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Night time follows regulation definition
+                    </li>
+                    <li class="mb-0">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Cross country = flights >50nm from origin
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0"><span class="material-icons me-2">info</span> Important</h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-0">
+                    <small>
+                        <strong>Digital Logbook:</strong> This electronic logbook is for personal record keeping. 
+                        Always maintain official paper records as required by aviation authorities.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.card-header h5, .card-header h6 {
+    display: flex;
+    align-items: center;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    display: flex;
+    align-items: center;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+}
+
+hr {
+    border-color: #e9ecef;
+    opacity: 1;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    .page-header h1 {
+        text-align: center;
+    }
+}
+</style>
+{% endblock %}

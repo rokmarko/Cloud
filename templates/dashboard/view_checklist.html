@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <span class="material-icons me-2">checklist</span>
+        {{ checklist.title }}
+    </h1>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.checklists') }}" class="btn btn-outline-secondary">
+            <span class="material-icons me-2">arrow_back</span> Back to Checklists
+        </a>
+        <button class="btn btn-primary" onclick="openChecklistEditor({{ checklist.id }}, '{{ checklist.title }}')">
+            <span class="material-icons me-2">edit</span> Edit
+        </button>
+    </div>
+</div>
+
+<!-- Checklist Editor Modal -->
+<div class="modal fade" id="checklistEditorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">edit</span>
+                    Checklist Editor
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <!-- Iframe with deferred loading - no initial src attribute -->
+                <iframe 
+                    id="checklistEditor" 
+                    data-src="https://www.kanardia.eu/apps/Customizer"
+                    width="100%" 
+                    height="100%" 
+                    style="border: none; min-height: 80vh; display: none;">
+                </iframe>
+                <!-- Loading indicator -->
+                <div id="editorLoading" class="d-flex justify-content-center align-items-center" style="height: 80vh;">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted">Loading Checklist Editor...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span class="material-icons me-1">close</span> Close
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveChecklist()">
+                    <span class="material-icons me-1">save</span> Save Checklist
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">checklist</span>
+                    {{ checklist.title }}
+                </h5>
+                <span class="badge" style="background: var(--kanardia-red); color: white;">
+                    {{ checklist.category.title() }}
+                </span>
+            </div>
+            <div class="card-body">
+                {% if checklist.description %}
+                    <p class="card-text mb-4">{{ checklist.description }}</p>
+                {% endif %}
+                
+                <h6 class="mb-3">
+                    <span class="material-icons me-2">task_alt</span>
+                    Checklist Items
+                </h6>
+                
+                <div class="checklist-items">
+                    {% if items %}
+                        {% for item in items %}
+                            <div class="checklist-item">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="item{{ loop.index }}">
+                                    <label class="form-check-label" for="item{{ loop.index }}">
+                                        {{ item }}
+                                    </label>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No checklist items found.</p>
+                    {% endif %}
+                </div>
+                
+                {% if items %}
+                <div class="mt-4">
+                    <button class="btn btn-success" onclick="resetChecklist()">
+                        <span class="material-icons me-1">refresh</span> Reset All
+                    </button>
+                    <button class="btn btn-outline-success" onclick="checkAll()">
+                        <span class="material-icons me-1">check_box</span> Check All
+                    </button>
+                    <span class="ms-3 text-muted">
+                        <span id="completedCount">0</span> of {{ items|length }} completed
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">info</span>
+                    Checklist Details
+                </h6>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-4">Category:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge" style="background: var(--kanardia-red); color: white;">
+                            {{ checklist.category.title() }}
+                        </span>
+                    </dd>
+                    
+                    <dt class="col-sm-4">Items:</dt>
+                    <dd class="col-sm-8">{{ items|length if items else 0 }}</dd>
+                    
+                    <dt class="col-sm-4">Created:</dt>
+                    <dd class="col-sm-8">{{ checklist.created_at.strftime('%B %d, %Y') }}</dd>
+                    
+                    {% if checklist.updated_at > checklist.created_at %}
+                    <dt class="col-sm-4">Updated:</dt>
+                    <dd class="col-sm-8">{{ checklist.updated_at.strftime('%B %d, %Y') }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">settings</span>
+                    Actions
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="openChecklistEditor({{ checklist.id }}, '{{ checklist.title }}')">
+                        <span class="material-icons me-2">edit</span> Edit Checklist
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="duplicateChecklist({{ checklist.id }})">
+                        <span class="material-icons me-2">content_copy</span> Duplicate
+                    </button>
+                    <hr>
+                    <button class="btn btn-outline-danger" onclick="deleteChecklist({{ checklist.id }})">
+                        <span class="material-icons me-2">delete</span> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <span class="material-icons me-2">lightbulb</span>
+                    Tips
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Check items as you complete them
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Use Reset All to start over
+                    </li>
+                    <li class="mb-2">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Edit button opens the Kanardia editor
+                    </li>
+                    <li class="mb-0">
+                        <span class="material-icons me-2 text-success" style="font-size: 1rem; vertical-align: middle;">check_circle</span> 
+                        Progress is tracked automatically
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CSRF token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<script>
+let currentChecklistId = {{ checklist.id }};
+let isEditorLoaded = false;
+let modalInstance = null;
+
+// Progress tracking
+function updateProgress() {
+    const checkboxes = document.querySelectorAll('.checklist-item input[type="checkbox"]');
+    const checked = document.querySelectorAll('.checklist-item input[type="checkbox"]:checked');
+    const completedCount = document.getElementById('completedCount');
+    
+    if (completedCount) {
+        completedCount.textContent = checked.length;
+    }
+    
+    // Update progress visually
+    checkboxes.forEach(checkbox => {
+        const item = checkbox.closest('.checklist-item');
+        if (checkbox.checked) {
+            item.classList.add('completed');
+        } else {
+            item.classList.remove('completed');
+        }
+    });
+}
+
+// Add event listeners to checkboxes
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.checklist-item input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateProgress);
+    });
+    
+    // Initial progress update
+    updateProgress();
+});
+
+// Reset all checkboxes
+function resetChecklist() {
+    const checkboxes = document.querySelectorAll('.checklist-item input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateProgress();
+}
+
+// Check all checkboxes
+function checkAll() {
+    const checkboxes = document.querySelectorAll('.checklist-item input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateProgress();
+}
+
+/**
+ * Handle messages received from the checklist editor iframe
+ * @param {MessageEvent} event - The message event from the iframe
+ */
+function handleEditorMessage(event) {
+    console.log('Checklist editor message:', event.data);
+
+    if (event.origin !== 'https://www.kanardia.eu') {
+        return; // Ignore messages from other origins
+    }
+    
+    if (event.data && event.data.length > 0) {
+        try {
+            var payload = JSON.parse(event.data);
+            if (payload.event === 'init') {
+                isEditorLoaded = true;
+                hideLoadingIndicator();
+                // Call load method after init is received
+                loadChecklistData();
+            }
+        } catch (error) {
+            console.error('Error parsing editor message:', error);
+        }
+    }
+}
+
+/**
+ * Open the checklist editor modal and load the iframe
+ * @param {number} checklistId - The ID of the checklist to edit
+ * @param {string} checklistTitle - The title of the checklist
+ */
+function openChecklistEditor(checklistId, checklistTitle) {
+    currentChecklistId = checklistId;
+    isEditorLoaded = false;
+    
+    // Update modal title
+    document.querySelector('#checklistEditorModal .modal-title').innerHTML = 
+        '<span class="material-icons me-2">edit</span>Edit: ' + checklistTitle;
+    
+    // Show loading indicator
+    showLoadingIndicator();
+
+    // Add event listener for iframe messages
+    window.addEventListener('message', handleEditorMessage);
+
+    // Load the iframe source (deferred loading)
+    const iframe = document.getElementById('checklistEditor');
+    const editorUrl = iframe.getAttribute('data-src');
+    iframe.src = editorUrl;
+
+    // Show the modal
+    modalInstance = new bootstrap.Modal(document.getElementById('checklistEditorModal'));
+    modalInstance.show();
+
+    // Handle modal close event to cleanup
+    const modalElement = document.getElementById('checklistEditorModal');
+    modalElement.addEventListener('hidden.bs.modal', function onModalHidden() {
+        cleanupEditor();
+        modalElement.removeEventListener('hidden.bs.modal', onModalHidden);
+    });
+}
+
+/**
+ * Show the loading indicator and hide the iframe
+ */
+function showLoadingIndicator() {
+    const loadingElement = document.getElementById('editorLoading');
+    const iframe = document.getElementById('checklistEditor');
+    
+    if (loadingElement) loadingElement.style.display = 'flex';
+    if (iframe) iframe.style.display = 'none';
+}
+
+/**
+ * Hide the loading indicator and show the iframe
+ */
+function hideLoadingIndicator() {
+    const loadingElement = document.getElementById('editorLoading');
+    const iframe = document.getElementById('checklistEditor');
+    
+    if (loadingElement) loadingElement.style.display = 'none';
+    if (iframe) iframe.style.display = 'block';
+}
+
+/**
+ * Clean up editor resources when modal is closed
+ */
+function cleanupEditor() {
+    // Remove event listener
+    window.removeEventListener('message', handleEditorMessage);
+    
+    // Clear iframe source to stop loading
+    const iframe = document.getElementById('checklistEditor');
+    if (iframe) {
+        iframe.src = 'about:blank';
+    }
+    
+    // Reset state
+    currentChecklistId = {{ checklist.id }};
+    isEditorLoaded = false;
+    modalInstance = null;
+    
+    // Reset loading indicator
+    showLoadingIndicator();
+}
+
+/**
+ * Load checklist data from the backend and send to iframe
+ */
+function loadChecklistData() {
+    if (!currentChecklistId || !isEditorLoaded) return;
+    
+    // Get the iframe
+    const iframe = document.getElementById('checklistEditor');
+    
+    // Fetch checklist data from your backend
+    fetch(`/api/checklist/${currentChecklistId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Send data to the iframe
+            iframe.contentWindow.postMessage({
+                action: 'load',
+                data: data
+            }, 'https://www.kanardia.eu');
+        })
+        .catch(error => {
+            console.error('Error loading checklist:', error);
+            alert('Error loading checklist data. Please try again.');
+        });
+}
+
+/**
+ * Save the current checklist data
+ */
+function saveChecklist() {
+    if (!currentChecklistId || !isEditorLoaded) {
+        alert('Editor not ready. Please wait for the editor to load.');
+        return;
+    }
+    
+    const iframe = document.getElementById('checklistEditor');
+    
+    // Request data from the iframe
+    iframe.contentWindow.postMessage({
+        action: 'getData'
+    }, 'https://www.kanardia.eu');
+    
+    // Listen for the response
+    function handleSaveResponse(event) {
+        if (event.origin !== 'https://www.kanardia.eu') return;
+        
+        if (event.data && event.data.action === 'dataResponse') {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // Save to your backend
+            fetch(`/api/checklist/${currentChecklistId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(event.data.data)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Close modal and refresh page
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error saving checklist:', error);
+                alert('Error saving checklist. Please try again.');
+            });
+            
+            // Remove the event listener
+            window.removeEventListener('message', handleSaveResponse);
+        }
+    }
+    
+    window.addEventListener('message', handleSaveResponse);
+}
+
+/**
+ * Duplicate a checklist
+ * @param {number} checklistId - The ID of the checklist to duplicate
+ */
+function duplicateChecklist(checklistId) {
+    if (confirm('Are you sure you want to duplicate this checklist?')) {
+        // Get CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        fetch(`/api/checklist/${checklistId}/duplicate`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Redirect to checklists page
+            window.location.href = "{{ url_for('dashboard.checklists') }}";
+        })
+        .catch(error => {
+            console.error('Error duplicating checklist:', error);
+            alert('Error duplicating checklist. Please try again.');
+        });
+    }
+}
+
+/**
+ * Delete a checklist
+ * @param {number} checklistId - The ID of the checklist to delete
+ */
+function deleteChecklist(checklistId) {
+    if (confirm('Are you sure you want to delete this checklist? This action cannot be undone.')) {
+        // Get CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        fetch(`/api/checklist/${checklistId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Redirect to checklists page
+            window.location.href = "{{ url_for('dashboard.checklists') }}";
+        })
+        .catch(error => {
+            console.error('Error deleting checklist:', error);
+            alert('Error deleting checklist. Please try again.');
+        });
+    }
+}
+</script>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.checklist-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f0f0f0;
+    transition: all 0.3s ease;
+}
+
+.checklist-item:last-child {
+    border-bottom: none;
+}
+
+.checklist-item.completed {
+    background-color: #f8f9fa;
+    opacity: 0.7;
+}
+
+.checklist-item .form-check-label {
+    font-size: 1rem;
+    line-height: 1.5;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checklist-item.completed .form-check-label {
+    text-decoration: line-through;
+    color: #6c757d;
+}
+
+.form-check-input {
+    margin-top: 0.25rem;
+    transform: scale(1.2);
+}
+
+.modal-fullscreen .modal-body {
+    padding: 0;
+}
+
+#checklistEditor {
+    width: 100%;
+    height: calc(100vh - 200px);
+    border: none;
+}
+
+#editorLoading {
+    background: #f8f9fa;
+}
+
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+    color: var(--kanardia-orange);
+}
+
+.spinner-border.text-primary {
+    color: var(--kanardia-orange) !important;
+}
+</style>
+{% endblock %}
