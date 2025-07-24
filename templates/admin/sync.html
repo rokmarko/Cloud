@@ -11,7 +11,7 @@
             <span class="material-icons me-2">devices</span> Configure Devices
         </a>
         <form method="POST" action="{{ url_for('admin.run_sync_manually') }}" class="d-inline">
-            {{ csrf_token() }}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="btn btn-primary" onclick="return confirm('Start manual sync now?')">
                 <span class="material-icons me-2">sync</span> Run Sync Now
             </button>
@@ -102,6 +102,56 @@
     </div>
     
     <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <span class="material-icons me-2">security</span>
+                    ThingsBoard Authentication
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if auth_status %}
+                    {% if auth_status.authenticated %}
+                        <div class="alert alert-success d-flex align-items-center">
+                            <span class="material-icons me-2">check_circle</span>
+                            <div>
+                                <strong>Connected</strong><br>
+                                <small>Last verified: {{ auth_status.last_check.strftime('%H:%M:%S') if auth_status.last_check else 'Unknown' }}</small>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-danger d-flex align-items-center">
+                            <span class="material-icons me-2">error</span>
+                            <div>
+                                <strong>Authentication Failed</strong><br>
+                                <small>{{ auth_status.error or 'Check credentials and server connectivity' }}</small>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-warning d-flex align-items-center">
+                        <span class="material-icons me-2">help</span>
+                        <div>
+                            <strong>Status Unknown</strong><br>
+                            <small>Test authentication to verify connection</small>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <form method="POST" action="{{ url_for('admin.test_thingsboard_auth') }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                        <span class="material-icons me-2" style="font-size: 1rem;">sync</span>
+                        Test Authentication
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0">

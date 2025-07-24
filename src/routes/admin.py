@@ -206,12 +206,33 @@ def sync_management():
     jobs = task_scheduler.get_jobs()
     sync_job = next((job for job in jobs if job.id == 'thingsboard_sync'), None)
     
+    # Get ThingsBoard authentication status
+    auth_status = thingsboard_sync.get_authentication_status()
+    
     return render_template('admin/sync.html',
                          title='ThingsBoard Sync Management',
                          total_devices=total_devices,
                          sync_enabled_devices=sync_enabled_devices,
                          recent_entries=recent_entries,
-                         sync_job=sync_job)
+                         sync_job=sync_job,
+                         auth_status=auth_status)
+
+
+@admin_bp.route('/sync/test-auth', methods=['POST'])
+@login_required
+@admin_required
+def test_thingsboard_auth():
+    """Test ThingsBoard authentication."""
+    try:
+        success = thingsboard_sync.test_authentication()
+        if success:
+            flash('ThingsBoard authentication successful!', 'success')
+        else:
+            flash('ThingsBoard authentication failed. Check credentials and server connectivity.', 'error')
+    except Exception as e:
+        flash(f'Error testing authentication: {str(e)}', 'error')
+    
+    return redirect(url_for('admin.sync_management'))
 
 
 @admin_bp.route('/sync/devices')

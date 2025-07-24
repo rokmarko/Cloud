@@ -5,7 +5,8 @@ ThingsBoard sync service for logbook entries
 import requests
 import json
 import logging
-from datetime import datetime, date
+import os
+from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 from src.app import db
 from src.models import Device, LogbookEntry, User
@@ -19,8 +20,104 @@ class ThingsBoardSyncService:
     """Service for syncing logbook entries from ThingsBoard server."""
     
     def __init__(self):
-        self.base_url = "https://aetos.kanardia.eu:8088"
+        self.base_url = os.getenv('THINGSBOARD_URL', 'https://aetos.kanardia.eu:8088')
+        self.username = os.getenv('THINGSBOARD_USERNAME', 'tenant@thingsboard.local')
+        self.password = os.getenv('THINGSBOARD_PASSWORD', 'tenant')
+        self.tenant_id = os.getenv('THINGSBOARD_TENANT_ID', 'tenant')
         self.timeout = 30  # seconds
+        self._jwt_token = None
+        self._token_expires_at = None
+    
+    def _authenticate(self) -> Optional[str]:
+        """
+        Authenticate with ThingsBoard and get JWT token.
+        
+        Returns:
+            JWT token string or None if authentication failed
+        """
+        # Check if we have a valid token that hasn't expired
+        if (self._jwt_token and self._token_expires_at and 
+            datetime.now() < self._token_expires_at):
+            return self._jwt_token
+        
+        auth_url = f"{self.base_url}/api/auth/login"
+        
+        payload = {
+            "username": self.username,
+            "password": self.password
+        }
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'KanardiaCloud/1.0'
+        }
+        
+        try:
+            logger.debug(f"Authenticating with ThingsBoard as {self.username}")
+            
+            response = requests.post(
+                url=auth_url,
+                json=payload,
+                headers=headers,
+                timeout=self.timeout
+            )
+            
+            response.raise_for_status()
+            
+            auth_data = response.json()
+            
+            # Extract JWT token
+            self._jwt_token = auth_data.get('token')
+            if not self._jwt_token:
+                logger.error("No JWT token received from ThingsBoard authentication")
+                return None
+            
+            # Calculate token expiration (tokens usually expire in 1 hour, but we'll refresh every 45 minutes)
+            self._token_expires_at = datetime.now() + timedelta(minutes=45)
+            
+            logger.info("Successfully authenticated with ThingsBoard")
+            return self._jwt_token
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"HTTP error during ThingsBoard authentication: {str(e)}")
+            self._jwt_token = None
+            self._token_expires_at = None
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response during ThingsBoard authentication: {str(e)}")
+            self._jwt_token = None
+            self._token_expires_at = None
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error during ThingsBoard authentication: {str(e)}")
+            self._jwt_token = None
+            self._token_expires_at = None
+            return None
+    
+    def test_authentication(self) -> bool:
+        """
+        Test if authentication with ThingsBoard is working.
+        
+        Returns:
+            True if authentication successful, False otherwise
+        """
+        jwt_token = self._authenticate()
+        return jwt_token is not None
+    
+    def get_authentication_status(self) -> Dict[str, Any]:
+        """
+        Get current authentication status information.
+        
+        Returns:
+            Dictionary with authentication status details
+        """
+        return {
+            'authenticated': self._jwt_token is not None,
+            'token_expires_at': self._token_expires_at.isoformat() if self._token_expires_at else None,
+            'base_url': self.base_url,
+            'username': self.username,
+            'tenant_id': self.tenant_id
+        }
     
     def sync_all_devices(self) -> Dict[str, Any]:
         """
@@ -130,6 +227,12 @@ class ThingsBoardSyncService:
         Returns:
             List of logbook entry dictionaries or None if error
         """
+        # Authenticate and get JWT token
+        jwt_token = self._authenticate()
+        if not jwt_token:
+            logger.error("Failed to authenticate with ThingsBoard")
+            return None
+        
         url = f"{self.base_url}/api/plugins/rpc/twoway/{device_id}"
         
         payload = {
@@ -139,6 +242,8 @@ class ThingsBoardSyncService:
         
         headers = {
             'Content-Type': 'application/json',
+            'Authorization': f'Bearer {jwt_token}',
+            'X-Authorization': f'Bearer {jwt_token}',
             'User-Agent': 'KanardiaCloud/1.0'
         }
         
@@ -169,6 +274,12 @@ class ThingsBoardSyncService:
             return None
         except requests.exceptions.RequestException as e:
             logger.error(f"HTTP error calling ThingsBoard API for device {device_id}: {str(e)}")
+            # If we get an authentication error, clear the token and try once more
+            if hasattr(e, 'response') and e.response and e.response.status_code in [401, 403]:
+                logger.info("Authentication failed, clearing token and retrying...")
+                self._jwt_token = None
+                self._token_expires_at = None
+                # Could implement one retry here, but for now just return None
             return None
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON response from ThingsBoard for device {device_id}: {str(e)}")
