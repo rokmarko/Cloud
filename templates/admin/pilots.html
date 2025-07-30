@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- CSRF token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
@@ -229,32 +232,43 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('admin.create_pilot_mapping') }}">
+                {{ form.hidden_tag() }}
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="pilot_name" class="form-label">Pilot Name</label>
-                        <input type="text" class="form-control" id="pilot_name" name="pilot_name" 
-                               required autocomplete="off" placeholder="Enter pilot name as it appears in logbook">
+                        {{ form.pilot_name.label(class="form-label") }}
+                        {{ form.pilot_name(class="form-control", placeholder="Enter pilot name as it appears in logbook", autocomplete="off") }}
                         <div class="form-text">This should match exactly how the pilot name appears in logbook entries.</div>
+                        {% if form.pilot_name.errors %}
+                            <div class="text-danger">
+                                {% for error in form.pilot_name.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                     
                     <div class="mb-3">
-                        <label for="user_id" class="form-label">Map to User</label>
-                        <select class="form-select" id="user_id" name="user_id" required>
-                            <option value="">Select a user...</option>
-                            {% for user in users %}
-                            <option value="{{ user.id }}">{{ user.nickname or user.email }} ({{ user.email }})</option>
-                            {% endfor %}
-                        </select>
+                        {{ form.user_id.label(class="form-label") }}
+                        {{ form.user_id(class="form-select") }}
+                        {% if form.user_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.user_id.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                     
                     <div class="mb-3">
-                        <label for="device_id" class="form-label">Device</label>
-                        <select class="form-select" id="device_id" name="device_id" required>
-                            <option value="">Select a device...</option>
-                            {% for device in devices %}
-                            <option value="{{ device.id }}">{{ device.name }} ({{ device.registration }})</option>
-                            {% endfor %}
-                        </select>
+                        {{ form.device_id.label(class="form-label") }}
+                        {{ form.device_id(class="form-select") }}
+                        {% if form.device_id.errors %}
+                            <div class="text-danger">
+                                {% for error in form.device_id.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
                     </div>
                     
                     {% if unmapped_pilots %}
@@ -273,7 +287,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Mapping</button>
+                    {{ form.submit(class="btn btn-primary") }}
                 </div>
             </form>
         </div>
@@ -300,6 +314,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <form method="POST" id="deleteForm" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-danger">Delete Mapping</button>
                 </form>
             </div>

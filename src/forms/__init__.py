@@ -125,3 +125,17 @@ class InitialLogbookTimeForm(FlaskForm):
     total_landings = IntegerField('Total Landings', validators=[Optional()], default=0)
     notes = TextAreaField('Notes', description='Optional notes about your previous flight experience')
     submit = SubmitField('Set Initial Times')
+
+
+class PilotMappingForm(FlaskForm):
+    """Form for creating pilot mappings."""
+    pilot_name = StringField('Pilot Name', validators=[DataRequired(), Length(min=1, max=100)])
+    user_id = SelectField('Map to User', coerce=int, validators=[DataRequired()])
+    device_id = SelectField('Device', coerce=int, validators=[DataRequired()])
+    submit = SubmitField('Create Mapping')
+    
+    def __init__(self, *args, **kwargs):
+        super(PilotMappingForm, self).__init__(*args, **kwargs)
+        # Populate choices in the view, not here
+        self.user_id.choices = []
+        self.device_id.choices = []

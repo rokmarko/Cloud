@@ -180,7 +180,7 @@ class LogbookEntry(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Foreign keys
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Allow None for unknown pilots
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=True)  # Optional link to device for synced entries
     
     # Relationships
@@ -235,7 +235,13 @@ class LogbookEntry(db.Model):
         pilot_mapping = self.get_pilot_mapping()
         if pilot_mapping:
             return pilot_mapping.user
-        # Fall back to the user_id field (original owner/creator)
+        
+        # If there's a pilot name but no mapping, don't fall back to device owner
+        # This keeps unknown pilots unlinked
+        if self.pilot_name:
+            return None
+            
+        # If no pilot name is specified, fall back to the entry's user_id
         return self.user
     
     @property

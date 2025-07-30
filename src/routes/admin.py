@@ -8,6 +8,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 from src.app import db
 from src.models import User, Device, Checklist, LogbookEntry, Pilot
+from src.forms import PilotMappingForm
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
 
@@ -452,6 +453,15 @@ def pilots():
     search = request.args.get('search', '')
     device_filter = request.args.get('device_filter', '')
     
+    # Create the form
+    form = PilotMappingForm()
+    
+    # Populate form choices
+    form.user_id.choices = [(user.id, f"{user.nickname or user.email} ({user.email})") 
+                           for user in User.query.filter_by(is_active=True).order_by(User.email.asc()).all()]
+    form.device_id.choices = [(device.id, f"{device.name} ({device.registration})") 
+                             for device in Device.query.filter_by(is_active=True).order_by(Device.name.asc()).all()]
+    
     # Base query
     query = Pilot.query
     
@@ -491,6 +501,7 @@ def pilots():
                          pilots=pilots,
                          devices=devices,
                          users=users,
+                         form=form,
                          unmapped_pilots=[p.pilot_name for p in unmapped_pilots],
                          search=search,
                          device_filter=device_filter)
@@ -501,54 +512,64 @@ def pilots():
 @admin_required
 def create_pilot_mapping():
     """Create a new pilot mapping."""
-    pilot_name = request.form.get('pilot_name', '').strip()
-    user_id = request.form.get('user_id', type=int)
-    device_id = request.form.get('device_id', type=int)
+    form = PilotMappingForm()
     
-    if not all([pilot_name, user_id, device_id]):
-        flash('All fields are required.', 'error')
-        return redirect(url_for('admin.pilots'))
+    # Populate form choices
+    form.user_id.choices = [(user.id, f"{user.nickname or user.email} ({user.email})") 
+                           for user in User.query.filter_by(is_active=True).order_by(User.email.asc()).all()]
+    form.device_id.choices = [(device.id, f"{device.name} ({device.registration})") 
+                             for device in Device.query.filter_by(is_active=True).order_by(Device.name.asc()).all()]
     
-    # Check if user exists
-    user = User.query.get(user_id)
-    if not user:
-        flash('Selected user does not exist.', 'error')
-        return redirect(url_for('admin.pilots'))
-    
-    # Check if device exists
-    device = Device.query.get(device_id)
-    if not device:
-        flash('Selected device does not exist.', 'error')
-        return redirect(url_for('admin.pilots'))
-    
-    # Check if mapping already exists
-    existing = Pilot.query.filter_by(
-        pilot_name=pilot_name,
-        device_id=device_id
-    ).first()
-    
-    if existing:
-        flash(f'Mapping for pilot "{pilot_name}" on device "{device.name}" already exists.', 'error')
-        return redirect(url_for('admin.pilots'))
-    
-    try:
-        # Create new pilot mapping
-        pilot = Pilot(
+    if form.validate_on_submit():
+        pilot_name = (form.pilot_name.data or '').strip()
+        user_id = form.user_id.data
+        device_id = form.device_id.data
+        
+        # Check if user exists
+        user = User.query.get(user_id)
+        if not user:
+            flash('Selected user does not exist.', 'error')
+            return redirect(url_for('admin.pilots'))
+        
+        # Check if device exists
+        device = Device.query.get(device_id)
+        if not device:
+            flash('Selected device does not exist.', 'error')
+            return redirect(url_for('admin.pilots'))
+        
+        # Check if mapping already exists
+        existing = Pilot.query.filter_by(
             pilot_name=pilot_name,
-            user_id=user_id,
             device_id=device_id
-        )
-        db.session.add(pilot)
-        db.session.commit()
+        ).first()
         
-        current_app.logger.info(f"Admin {current_user.nickname} created pilot mapping: "
-                              f"{pilot_name} -> {user.email} on {device.name}")
-        flash(f'Successfully created pilot mapping: {pilot_name} -> {user.email} on {device.name}', 'success')
+        if existing:
+            flash(f'Mapping for pilot "{pilot_name}" on device "{device.name}" already exists.', 'error')
+            return redirect(url_for('admin.pilots'))
         
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error creating pilot mapping: {str(e)}")
-        flash('Error creating pilot mapping. Please try again.', 'error')
+        try:
+            # Create new pilot mapping
+            pilot = Pilot(
+                pilot_name=pilot_name,
+                user_id=user_id,
+                device_id=device_id
+            )
+            db.session.add(pilot)
+            db.session.commit()
+            
+            current_app.logger.info(f"Admin {current_user.nickname} created pilot mapping: "
+                                  f"{pilot_name} -> {user.email} on {device.name}")
+            flash(f'Successfully created pilot mapping: {pilot_name} -> {user.email} on {device.name}', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating pilot mapping: {str(e)}")
+            flash('Error creating pilot mapping. Please try again.', 'error')
+    else:
+        # Form validation failed
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
     
     return redirect(url_for('admin.pilots'))
 

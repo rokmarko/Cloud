@@ -393,6 +393,23 @@ class ThingsBoardSyncService:
                 return False
             
             # Create new logbook entry
+            # Determine user_id: use pilot mapping if available, otherwise device owner
+            # But only if no pilot name is specified or pilot is mapped
+            pilot_user_id = None
+            if pilot_name:
+                pilot_user_id = self._resolve_pilot_user(device, pilot_name)
+            
+            # Set user_id based on pilot resolution
+            if pilot_name and pilot_user_id is None:
+                # Unknown pilot - don't assign to anyone
+                entry_user_id = None
+            elif pilot_user_id:
+                # Known pilot mapping
+                entry_user_id = pilot_user_id
+            else:
+                # No pilot name specified - assign to device owner
+                entry_user_id = device.user_id
+            
             logbook_entry = LogbookEntry(
                 date=entry_date,
                 aircraft_type=aircraft_type,
@@ -411,15 +428,9 @@ class ThingsBoardSyncService:
                 landings_night=int(entry_data.get('landings_night', 0)),
                 remarks=entry_data.get('remarks', f'Synced from ThingsBoard device {device.name}'),
                 pilot_name=pilot_name,  # Add pilot name from entry data
-                user_id=device.user_id,
+                user_id=entry_user_id,  # Use resolved user_id (may be None for unknown pilots)
                 device_id=device.id  # Link to the syncing device
             )
-            
-            # Handle pilot mapping if pilot name is provided
-            if pilot_name:
-                pilot_user_id = self._resolve_pilot_user(device, pilot_name)
-                if pilot_user_id:
-                    logbook_entry.user_id = pilot_user_id
             
             db.session.add(logbook_entry)
             
@@ -538,17 +549,14 @@ class ThingsBoardSyncService:
                 logger.debug(f"Found existing pilot mapping: {pilot_name} -> User {pilot_mapping.user_id}")
                 return pilot_mapping.user_id
             
-            # For now, fall back to device owner
-            # In the future, this could be enhanced with:
-            # - Automatic pilot creation from external systems
-            # - Admin interface to manage pilot mappings
-            # - Default pilot assignments per device
-            logger.info(f"No pilot mapping found for '{pilot_name}' on device {device.name}, using device owner")
-            return device.user_id
+            # No pilot mapping found - do not fall back to device owner
+            # This allows entries with unknown pilots to remain unlinked
+            logger.info(f"No pilot mapping found for '{pilot_name}' on device {device.name}, entry will remain unlinked")
+            return None
             
         except Exception as e:
             logger.error(f"Error resolving pilot user for '{pilot_name}': {str(e)}")
-            return device.user_id  # Fall back to device owner
+            return None  # Do not fall back to device owner
 
 
 # Create singleton instance
