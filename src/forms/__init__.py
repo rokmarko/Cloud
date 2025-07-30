@@ -67,10 +67,9 @@ class DeviceForm(FlaskForm):
     name = StringField('Device Name', validators=[DataRequired(), Length(max=100)])
     device_type = SelectField('Device Type', choices=[
         ('aircraft', 'Aircraft'),
-        ('radio', 'Radio'),
-        ('gps', 'GPS'),
-        ('transponder', 'Transponder'),
-        ('other', 'Other')
+        ('gyro', 'Gyro'),
+        ('helicopter', 'Helicopter'),
+        ('trike', 'Trike')
     ], validators=[DataRequired()])
     model = StringField('Model', validators=[Length(max=100)])
     serial_number = StringField('Serial Number', validators=[Length(max=100)])

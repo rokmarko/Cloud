@@ -36,7 +36,7 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="material-icons me-2 {% if device.is_active %}text-primary{% else %}text-muted{% endif %}">
-                                        {% if device.device_type == 'aircraft' %}flight{% elif device.device_type == 'radio' %}radio{% elif device.device_type == 'gps' %}location_on{% else %}device_hub{% endif %}
+                                        {% if device.device_type == 'aircraft' %}flight{% elif device.device_type == 'gyro' %}sports{% elif device.device_type == 'helicopter' %}helicopter{% elif device.device_type == 'trike' %}paragliding{% else %}flight{% endif %}
                                     </span>
                                     <div>
                                         <strong {% if not device.is_active %}class="text-muted"{% endif %}>{{ device.name }}</strong>

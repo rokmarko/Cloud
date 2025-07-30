@@ -63,7 +63,7 @@
         <div class="card bg-warning text-white">
             <div class="card-body">
                 <div class="d-flex align-items-center">
-                    <i class="bi bi-{% if device.device_type == 'aircraft' %}airplane{% elif device.device_type == 'radio' %}broadcast{% elif device.device_type == 'gps' %}geo-alt{% else %}cpu{% endif %} fs-2 me-3"></i>
+                    <i class="bi bi-{% if device.device_type == 'aircraft' %}airplane{% elif device.device_type == 'gyro' %}person-check{% elif device.device_type == 'helicopter' %}airplane-engines{% elif device.device_type == 'trike' %}bicycle{% else %}airplane{% endif %} fs-2 me-3"></i>
                     <div>
                         <h4 class="mb-0">{{ device.device_type.title() }}</h4>
                         <small>Device Type</small>
