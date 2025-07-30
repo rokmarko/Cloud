@@ -90,6 +90,35 @@ class Device(db.Model):
         return f'<Device {self.name}>'
 
 
+class Pilot(db.Model):
+    """Pilot model to map users to devices with pilot names."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    pilot_name = db.Column(db.String(100), nullable=False)  # Name as it appears in logbook
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='pilot_mappings')
+    device = db.relationship('Device', backref='pilots')
+    
+    # Unique constraint to prevent duplicate pilot names per device
+    __table_args__ = (db.UniqueConstraint('pilot_name', 'device_id', name='_pilot_device_uc'),)
+    
+    def __repr__(self):
+        return f'<Pilot {self.pilot_name} on {self.device.name if self.device else "Unknown Device"}>'
+    
+    def get_logbook_entry_count(self):
+        """Get the number of logbook entries for this pilot on this device."""
+        return LogbookEntry.query.filter_by(
+            pilot_name=self.pilot_name,
+            device_id=self.device_id
+        ).count()
+
+
 class Checklist(db.Model):
     """Checklist model for flight procedures."""
     
@@ -146,6 +175,7 @@ class LogbookEntry(db.Model):
     landings_day = db.Column(db.Integer, default=0)
     landings_night = db.Column(db.Integer, default=0)
     remarks = db.Column(db.Text)
+    pilot_name = db.Column(db.String(100), nullable=True)  # Name of pilot as recorded in logbook
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -156,6 +186,7 @@ class LogbookEntry(db.Model):
     # Relationships
     # Note: user relationship is handled by existing 'pilot' backref from User model
     device = db.relationship('Device', backref=db.backref('device_logbook_entries', lazy=True))
+    user = db.relationship('User', overlaps="logbook_entries,pilot")
     
     def get_calculated_flight_time(self) -> float:
         """Calculate flight time in hours from takeoff and landing times."""
@@ -189,6 +220,23 @@ class LogbookEntry(db.Model):
             'registration': self.aircraft_registration,
             'type': self.aircraft_type
         }
+    
+    def get_pilot_mapping(self):
+        """Get pilot mapping if pilot_name and device are available."""
+        if self.pilot_name and self.device_id:
+            return Pilot.query.filter_by(
+                pilot_name=self.pilot_name,
+                device_id=self.device_id
+            ).first()
+        return None
+    
+    def get_actual_pilot_user(self):
+        """Get the actual user who is the pilot for this entry."""
+        pilot_mapping = self.get_pilot_mapping()
+        if pilot_mapping:
+            return pilot_mapping.user
+        # Fall back to the user_id field (original owner/creator)
+        return self.user
     
     @property
     def is_synced(self) -> bool:

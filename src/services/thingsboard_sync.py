@@ -9,7 +9,7 @@ import os
 from datetime import datetime, date, timedelta, time
 from typing import List, Dict, Any, Optional
 from src.app import db
-from src.models import Device, LogbookEntry, User
+from src.models import Device, LogbookEntry, User, Pilot
 from flask import current_app
 
 
@@ -337,6 +337,9 @@ class ThingsBoardSyncService:
             departure_airport = entry_data.get('departure_airport', 'UNKNOWN')
             arrival_airport = entry_data.get('arrival_airport', 'UNKNOWN')
             
+            # Extract pilot name from entry data
+            pilot_name = entry_data.get('pilot_name') or entry_data.get('pilot') or entry_data.get('pic_name')
+            
             # Parse takeoff and landing times
             takeoff_time = self._parse_time(entry_data.get('takeoff_time'))
             landing_time = self._parse_time(entry_data.get('landing_time'))
@@ -407,13 +410,21 @@ class ThingsBoardSyncService:
                 landings_day=int(entry_data.get('landings_day', 0)),
                 landings_night=int(entry_data.get('landings_night', 0)),
                 remarks=entry_data.get('remarks', f'Synced from ThingsBoard device {device.name}'),
+                pilot_name=pilot_name,  # Add pilot name from entry data
                 user_id=device.user_id,
                 device_id=device.id  # Link to the syncing device
             )
             
+            # Handle pilot mapping if pilot name is provided
+            if pilot_name:
+                pilot_user_id = self._resolve_pilot_user(device, pilot_name)
+                if pilot_user_id:
+                    logbook_entry.user_id = pilot_user_id
+            
             db.session.add(logbook_entry)
             
-            logger.debug(f"Created new logbook entry for device {device.name} ({aircraft_registration}) on {entry_date}")
+            logger.debug(f"Created new logbook entry for device {device.name} ({aircraft_registration}) on {entry_date}"
+                        f"{f' for pilot {pilot_name}' if pilot_name else ''}")
             return True
             
         except (ValueError, TypeError, KeyError) as e:
@@ -504,6 +515,40 @@ class ThingsBoardSyncService:
         
         logger.warning(f"Unable to parse time: {time_str}")
         return None
+    
+    def _resolve_pilot_user(self, device: Device, pilot_name: str) -> Optional[int]:
+        """
+        Resolve pilot name to user ID, creating pilot mapping if needed.
+        
+        Args:
+            device: Device instance
+            pilot_name: Name of the pilot from logbook entry
+            
+        Returns:
+            User ID of the pilot, or None if not resolved
+        """
+        try:
+            # Check if pilot mapping already exists
+            pilot_mapping = Pilot.query.filter_by(
+                pilot_name=pilot_name,
+                device_id=device.id
+            ).first()
+            
+            if pilot_mapping:
+                logger.debug(f"Found existing pilot mapping: {pilot_name} -> User {pilot_mapping.user_id}")
+                return pilot_mapping.user_id
+            
+            # For now, fall back to device owner
+            # In the future, this could be enhanced with:
+            # - Automatic pilot creation from external systems
+            # - Admin interface to manage pilot mappings
+            # - Default pilot assignments per device
+            logger.info(f"No pilot mapping found for '{pilot_name}' on device {device.name}, using device owner")
+            return device.user_id
+            
+        except Exception as e:
+            logger.error(f"Error resolving pilot user for '{pilot_name}': {str(e)}")
+            return device.user_id  # Fall back to device owner
 
 
 # Create singleton instance

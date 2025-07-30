@@ -7,7 +7,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from datetime import datetime, timedelta
 from src.app import db
-from src.models import User, Device, Checklist, LogbookEntry
+from src.models import User, Device, Checklist, LogbookEntry, Pilot
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
 
@@ -441,3 +441,155 @@ def clear_synced_entries():
         flash('Error clearing synced entries. Please try again.', 'error')
     
     return redirect(url_for('admin.sync_management'))
+
+
+@admin_bp.route('/pilots')
+@login_required
+@admin_required
+def pilots():
+    """Pilot mappings management page."""
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '')
+    device_filter = request.args.get('device_filter', '')
+    
+    # Base query
+    query = Pilot.query
+    
+    # Apply search filter
+    if search:
+        query = query.join(User).filter(
+            db.or_(
+                Pilot.pilot_name.contains(search),
+                User.email.contains(search),
+                User.nickname.contains(search)
+            )
+        )
+    
+    # Apply device filter
+    if device_filter:
+        query = query.join(Device).filter(Device.id == device_filter)
+    
+    pilots = query.order_by(Pilot.pilot_name.asc()).paginate(
+        page=page, per_page=20, error_out=False
+    )
+    
+    # Get all devices for filter dropdown
+    devices = Device.query.filter_by(is_active=True).order_by(Device.name.asc()).all()
+    
+    # Get all users for mapping dropdown
+    users = User.query.filter_by(is_active=True).order_by(User.email.asc()).all()
+    
+    # Get unmapped pilots from logbook entries
+    unmapped_pilots = db.session.query(LogbookEntry.pilot_name.distinct().label('pilot_name'))\
+        .filter(LogbookEntry.pilot_name.isnot(None))\
+        .filter(~LogbookEntry.pilot_name.in_(
+            db.session.query(Pilot.pilot_name)
+        )).all()
+    
+    return render_template('admin/pilots.html',
+                         title='Pilot Mappings',
+                         pilots=pilots,
+                         devices=devices,
+                         users=users,
+                         unmapped_pilots=[p.pilot_name for p in unmapped_pilots],
+                         search=search,
+                         device_filter=device_filter)
+
+
+@admin_bp.route('/pilots/create', methods=['POST'])
+@login_required
+@admin_required
+def create_pilot_mapping():
+    """Create a new pilot mapping."""
+    pilot_name = request.form.get('pilot_name', '').strip()
+    user_id = request.form.get('user_id', type=int)
+    device_id = request.form.get('device_id', type=int)
+    
+    if not all([pilot_name, user_id, device_id]):
+        flash('All fields are required.', 'error')
+        return redirect(url_for('admin.pilots'))
+    
+    # Check if user exists
+    user = User.query.get(user_id)
+    if not user:
+        flash('Selected user does not exist.', 'error')
+        return redirect(url_for('admin.pilots'))
+    
+    # Check if device exists
+    device = Device.query.get(device_id)
+    if not device:
+        flash('Selected device does not exist.', 'error')
+        return redirect(url_for('admin.pilots'))
+    
+    # Check if mapping already exists
+    existing = Pilot.query.filter_by(
+        pilot_name=pilot_name,
+        device_id=device_id
+    ).first()
+    
+    if existing:
+        flash(f'Mapping for pilot "{pilot_name}" on device "{device.name}" already exists.', 'error')
+        return redirect(url_for('admin.pilots'))
+    
+    try:
+        # Create new pilot mapping
+        pilot = Pilot(
+            pilot_name=pilot_name,
+            user_id=user_id,
+            device_id=device_id
+        )
+        db.session.add(pilot)
+        db.session.commit()
+        
+        current_app.logger.info(f"Admin {current_user.nickname} created pilot mapping: "
+                              f"{pilot_name} -> {user.email} on {device.name}")
+        flash(f'Successfully created pilot mapping: {pilot_name} -> {user.email} on {device.name}', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creating pilot mapping: {str(e)}")
+        flash('Error creating pilot mapping. Please try again.', 'error')
+    
+    return redirect(url_for('admin.pilots'))
+
+
+@admin_bp.route('/pilots/<int:pilot_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_pilot_mapping(pilot_id):
+    """Delete a pilot mapping."""
+    pilot = Pilot.query.get_or_404(pilot_id)
+    
+    try:
+        pilot_info = f"{pilot.pilot_name} -> {pilot.user.email} on {pilot.device.name}"
+        db.session.delete(pilot)
+        db.session.commit()
+        
+        current_app.logger.info(f"Admin {current_user.nickname} deleted pilot mapping: {pilot_info}")
+        flash(f'Successfully deleted pilot mapping: {pilot_info}', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting pilot mapping: {str(e)}")
+        flash('Error deleting pilot mapping. Please try again.', 'error')
+    
+    return redirect(url_for('admin.pilots'))
+
+
+@admin_bp.route('/api/pilots/suggestions')
+@login_required
+@admin_required
+def pilot_suggestions():
+    """Get pilot name suggestions from logbook entries."""
+    query = request.args.get('q', '').strip()
+    
+    if not query or len(query) < 2:
+        return jsonify([])
+    
+    # Get pilot names from logbook entries that match the query
+    pilot_names = db.session.query(LogbookEntry.pilot_name.distinct().label('pilot_name'))\
+        .filter(LogbookEntry.pilot_name.isnot(None))\
+        .filter(LogbookEntry.pilot_name.contains(query))\
+        .limit(10).all()
+    
+    return jsonify([p.pilot_name for p in pilot_names])

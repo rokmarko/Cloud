@@ -121,6 +121,7 @@
                             <th>Aircraft</th>
                             <th>Type</th>
                             <th>Route</th>
+                            <th>Pilot</th>
                             <th>Flight Time</th>
                             <th>PIC</th>
                             <th>Dual</th>
@@ -152,6 +153,21 @@
                                 <span class="text-primary">{{ entry.departure_airport }}</span>
                                 <span class="material-icons mx-1" style="font-size: 0.8rem; vertical-align: middle;">arrow_forward</span>
                                 <span class="text-success">{{ entry.arrival_airport }}</span>
+                            </td>
+                            <td>
+                                {% if entry.pilot_name %}
+                                    <span class="badge bg-info">{{ entry.pilot_name }}</span>
+                                    {% if entry.is_synced %}
+                                        {% set pilot_user = entry.get_actual_pilot_user() %}
+                                        {% if pilot_user and pilot_user != current_user %}
+                                            <br><small class="text-muted">Mapped to: {{ pilot_user.email }}</small>
+                                        {% elif not pilot_user %}
+                                            <br><small class="text-warning">⚠ Unknown pilot</small>
+                                        {% endif %}
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <span class="badge" style="background: var(--kanardia-orange); color: white;">

@@ -107,6 +107,7 @@
                                     <th>From</th>
                                     <th>To</th>
                                     <th>Duration</th>
+                                    <th>Pilot</th>
                                     <th>Device</th>
                                     <th>Type</th>
                                     <th>Remarks</th>
@@ -124,6 +125,21 @@
                                     <td>{{ entry.departure_airport or 'N/A' }}</td>
                                     <td>{{ entry.arrival_airport or 'N/A' }}</td>
                                     <td>{{ "%.2f"|format(entry.flight_time or 0) }}h</td>
+                                    <td>
+                                        {% if entry.pilot_name %}
+                                            <span class="badge bg-primary">{{ entry.pilot_name }}</span>
+                                            {% if entry.is_synced %}
+                                                {% set pilot_user = entry.get_actual_pilot_user() %}
+                                                {% if pilot_user %}
+                                                    <br><small class="text-success">→ {{ pilot_user.email }}</small>
+                                                {% else %}
+                                                    <br><small class="text-warning">⚠ Unmapped</small>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% else %}
+                                            <small class="text-muted">No pilot name</small>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% if entry.device %}
                                         <span class="badge bg-success">
