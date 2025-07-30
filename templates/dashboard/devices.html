@@ -5,7 +5,7 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2"><i class="bi bi-cpu"></i> Devices</h1>
+    <h1 class="h2"><i class="bi bi-cpu"></i> My Devices</h1>
     <div class="btn-toolbar mb-2 mb-md-0">
         <a href="{{ url_for('dashboard.add_device') }}" class="btn btn-primary">
             <i class="bi bi-plus-circle"></i> Add Device
@@ -32,6 +32,10 @@
                                 <i class="bi bi-three-dots"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('dashboard.device_logbook', device_id=device.id) }}">
+                                    <i class="bi bi-book"></i> View Logbook
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{{ url_for('dashboard.edit_device', device_id=device.id) }}">
                                     <i class="bi bi-pencil"></i> Edit
                                 </a></li>
@@ -63,7 +67,28 @@
                         <p class="card-text"><strong>Registration:</strong> {{ device.registration }}</p>
                     {% endif %}
                     
-                    <p class="card-text">
+                    <!-- Logbook Stats -->
+                    <div class="mt-3 pt-3 border-top">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <h6 class="text-primary mb-1">{{ device.logbook_entry_count }}</h6>
+                                <small class="text-muted">Log Entries</small>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="text-success mb-1">{{ "%.1f"|format(device.total_flight_time) }}</h6>
+                                <small class="text-muted">Flight Hours</small>
+                            </div>
+                        </div>
+                        {% if device.logbook_entry_count > 0 %}
+                        <div class="text-center mt-2">
+                            <a href="{{ url_for('dashboard.device_logbook', device_id=device.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-book"></i> View Logbook
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <p class="card-text mt-3">
                         <small class="text-muted">Added {{ device.created_at.strftime('%m/%d/%Y') }}</small>
                     </p>
                 </div>

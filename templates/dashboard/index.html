@@ -37,6 +37,18 @@
     </div>
 
     <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.my_aircraft_access') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: #9C27B0;">flight</span>
+                <h2 class="stats-number">{{ pilot_mapping_count }}</h2>
+                <p class="stats-label">My Aircraft</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
         <a href="{{ url_for('dashboard.logbook') }}" class="text-decoration-none">
             <div class="stats-card clickable-card">
                 <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">book</span>
@@ -117,6 +129,9 @@
                 <div class="d-grid gap-3">
                     <a href="{{ url_for('dashboard.add_logbook_entry') }}" class="btn btn-primary">
                         <span class="material-icons me-2">add_circle</span> Add Flight Entry
+                    </a>
+                    <a href="{{ url_for('dashboard.my_aircraft_access') }}" class="btn btn-outline-info">
+                        <span class="material-icons me-2">flight</span> My Aircraft
                     </a>
                     <a href="{{ url_for('dashboard.add_device') }}" class="btn btn-outline-primary">
                         <span class="material-icons me-2">add_circle</span> Add Device

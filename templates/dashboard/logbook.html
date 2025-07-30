@@ -50,14 +50,6 @@
     
     <div class="col-xl-2 col-md-4 col-sm-6">
         <div class="stats-card">
-            <span class="material-icons mb-2" style="font-size: 2rem; color: #9C27B0;">flight</span>
-            <h4 class="stats-number">{{ "%.1f"|format(totals.instrument_time) }}</h4>
-            <p class="stats-label">Instrument</p>
-        </div>
-    </div>
-    
-    <div class="col-xl-2 col-md-4 col-sm-6">
-        <div class="stats-card">
             <span class="material-icons mb-2" style="font-size: 2rem; color: #795548;">explore</span>
             <h4 class="stats-number">{{ "%.1f"|format(totals.cross_country_time) }}</h4>
             <p class="stats-label">Cross Country</p>
@@ -126,7 +118,6 @@
                             <th>PIC</th>
                             <th>Dual</th>
                             <th>Night</th>
-                            <th>Instrument</th>
                             <th>Landings</th>
                             <th>Remarks</th>
                         </tr>
@@ -191,13 +182,6 @@
                             <td>
                                 {% if entry.night_time > 0 %}
                                     <span class="badge bg-dark">{{ "%.1f"|format(entry.night_time) }}h</span>
-                                {% else %}
-                                    <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if entry.instrument_time > 0 %}
-                                    <span class="badge bg-info">{{ "%.1f"|format(entry.instrument_time) }}h</span>
                                 {% else %}
                                     <span class="text-muted">-</span>
                                 {% endif %}

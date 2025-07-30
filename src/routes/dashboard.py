@@ -5,7 +5,7 @@ Dashboard and application feature routes
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from src.app import db
-from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime
+from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot
 from src.forms import DeviceForm, ChecklistForm, LogbookEntryForm, InitialLogbookTimeForm
 import json
 
@@ -102,6 +102,10 @@ def index():
     checklist_count = Checklist.query.filter_by(user_id=current_user.id, is_active=True).count()
     logbook_count = LogbookEntry.query.filter_by(user_id=current_user.id).count()
     
+    # Get pilot mapping count (aircraft the user has access to)
+    pilot_mapping_count = Pilot.query.filter_by(user_id=current_user.id, is_active=True)\
+        .join(Device).filter(Device.is_active == True).count()
+    
     # Get recent logbook entries
     recent_entries = LogbookEntry.query.filter_by(user_id=current_user.id)\
         .order_by(LogbookEntry.date.desc()).limit(5).all()
@@ -115,6 +119,7 @@ def index():
                          device_count=device_count,
                          checklist_count=checklist_count,
                          logbook_count=logbook_count,
+                         pilot_mapping_count=pilot_mapping_count,
                          recent_entries=recent_entries,
                          total_flight_time=total_flight_time,
                          totals=totals)
@@ -125,7 +130,15 @@ def index():
 def devices():
     """Device management page."""
     devices = Device.query.filter_by(user_id=current_user.id, is_active=True).all()
-    return render_template('dashboard/devices.html', title='Devices', devices=devices)
+    
+    # Add logbook entry count for each device
+    for device in devices:
+        device.logbook_entry_count = LogbookEntry.query.filter_by(device_id=device.id).count()
+        # Calculate total flight time for this device
+        entries = LogbookEntry.query.filter_by(device_id=device.id).all()
+        device.total_flight_time = sum(entry.flight_time or 0 for entry in entries)
+    
+    return render_template('dashboard/devices.html', title='My Devices', devices=devices)
 
 
 @dashboard_bp.route('/devices/add', methods=['GET', 'POST'])
@@ -175,6 +188,42 @@ def delete_device(device_id):
     db.session.commit()
     flash('Device deleted successfully!', 'success')
     return redirect(url_for('dashboard.devices'))
+
+
+@dashboard_bp.route('/devices/<int:device_id>/logbook')
+@login_required
+def device_logbook(device_id):
+    """View all logbook entries linked to a specific device (for device owner)."""
+    device = Device.query.filter_by(id=device_id, user_id=current_user.id, is_active=True).first_or_404()
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    # Get all logbook entries linked to this device
+    entries = LogbookEntry.query.filter_by(device_id=device_id)\
+        .order_by(LogbookEntry.date.desc(), LogbookEntry.created_at.desc())\
+        .paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Calculate totals for this device
+    device_entries = LogbookEntry.query.filter_by(device_id=device_id).all()
+    total_flight_time = sum(entry.flight_time or 0 for entry in device_entries)
+    total_entries = len(device_entries)
+    
+    # Count unique pilots who have flown this device
+    unique_pilots = set()
+    for entry in device_entries:
+        if entry.pilot_name:
+            unique_pilots.add(entry.pilot_name)
+        elif entry.user:
+            unique_pilots.add(entry.user.full_name)
+    
+    return render_template('dashboard/device_logbook.html',
+                         title=f'Logbook - {device.name}',
+                         device=device,
+                         entries=entries,
+                         total_flight_time=total_flight_time,
+                         total_entries=total_entries,
+                         unique_pilots_count=len(unique_pilots))
 
 
 @dashboard_bp.route('/api/device/<int:device_id>', methods=['DELETE'])
@@ -328,6 +377,38 @@ def add_logbook_entry():
         return redirect(url_for('dashboard.logbook'))
     
     return render_template('dashboard/add_logbook_entry.html', title='Add Logbook Entry', form=form)
+
+
+@dashboard_bp.route('/my-aircraft-access')
+@login_required
+def my_aircraft_access():
+    """Show devices/aircraft that the current user is mapped to as a pilot."""
+    # Get all pilot mappings for the current user
+    pilot_mappings = Pilot.query.filter_by(user_id=current_user.id, is_active=True)\
+        .join(Device)\
+        .filter(Device.is_active == True)\
+        .order_by(Device.name.asc()).all()
+    
+    # Calculate statistics for each mapping
+    for mapping in pilot_mappings:
+        # Get logbook entries for this pilot on this device
+        entries = LogbookEntry.query.filter_by(
+            pilot_name=mapping.pilot_name,
+            device_id=mapping.device_id
+        ).all()
+        
+        mapping.logbook_entry_count = len(entries)
+        mapping.total_flight_time = sum(entry.flight_time or 0 for entry in entries)
+        
+        # Get recent entries (last 5)
+        mapping.recent_entries = LogbookEntry.query.filter_by(
+            pilot_name=mapping.pilot_name,
+            device_id=mapping.device_id
+        ).order_by(LogbookEntry.date.desc()).limit(5).all()
+    
+    return render_template('dashboard/my_aircraft_access.html',
+                         title='My Aircraft',
+                         pilot_mappings=pilot_mappings)
 
 
 @dashboard_bp.route('/logbook/initial-time', methods=['GET', 'POST'])

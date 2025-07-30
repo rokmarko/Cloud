@@ -81,7 +81,7 @@
                             {% endif %}
                         </div>
                         
-                        <div class="col-md-6">
+                        <div class="col-md-6" style="display: none;">
                             {{ form.instrument_time.label(class="form-label") }}
                             {{ form.instrument_time(class="form-control" + (" is-invalid" if form.instrument_time.errors else ""), step="0.1") }}
                             {% if form.instrument_time.errors %}

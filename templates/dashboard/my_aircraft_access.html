@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="material-icons me-2">flight</i> My Aircraft</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-outline-primary">
+            <i class="material-icons me-2">book</i> View My Logbook
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="material-icons me-2">info</i>
+            <strong>About My Aircraft:</strong> This page shows aircraft and devices where you have been mapped as a pilot. 
+            These mappings allow your flights to be properly attributed to you when data is synced from devices.
+        </div>
+    </div>
+</div>
+
+{% if pilot_mappings %}
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="material-icons fs-2 me-3">flight</i>
+                        <div>
+                            <h4 class="mb-0">{{ pilot_mappings|length }}</h4>
+                            <small>My Aircraft</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="material-icons fs-2 me-3">schedule</i>
+                        <div>
+                            <h4 class="mb-0">{{ "%.1f"|format(pilot_mappings|sum(attribute='total_flight_time', start=0)) }}</h4>
+                            <small>Total Hours</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="material-icons fs-2 me-3">book</i>
+                        <div>
+                            <h4 class="mb-0">{{ pilot_mappings|sum(attribute='logbook_entry_count', start=0) }}</h4>
+                            <small>Log Entries</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aircraft Cards -->
+    <div class="row">
+        {% for mapping in pilot_mappings %}
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="material-icons me-2">
+                                {% if mapping.device.device_type == 'aircraft' %}flight
+                                {% elif mapping.device.device_type == 'radio' %}radio
+                                {% elif mapping.device.device_type == 'gps' %}location_on
+                                {% else %}devices{% endif %}
+                            </i>
+                            {{ mapping.device.name }}
+                        </h6>
+                        <span class="badge bg-secondary">{{ mapping.device.device_type.title() }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Device Info -->
+                    <div class="mb-3">
+                        {% if mapping.device.registration %}
+                        <p class="card-text mb-1"><strong>Registration:</strong> {{ mapping.device.registration }}</p>
+                        {% endif %}
+                        {% if mapping.device.model %}
+                        <p class="card-text mb-1"><strong>Model:</strong> {{ mapping.device.model }}</p>
+                        {% endif %}
+                        <p class="card-text mb-1"><strong>Pilot Name:</strong> {{ mapping.pilot_name }}</p>
+                        <p class="card-text"><strong>Owner:</strong> {{ mapping.device.owner.full_name }}</p>
+                    </div>
+
+                    <!-- Flight Statistics -->
+                    <div class="row text-center mb-3">
+                        <div class="col-6">
+                            <h6 class="text-primary mb-1">{{ mapping.logbook_entry_count }}</h6>
+                            <small class="text-muted">Flights</small>
+                        </div>
+                        <div class="col-6">
+                            <h6 class="text-success mb-1">{{ "%.1f"|format(mapping.total_flight_time) }}</h6>
+                            <small class="text-muted">Hours</small>
+                        </div>
+                    </div>
+
+                    <!-- Recent Flights -->
+                    {% if mapping.recent_entries %}
+                    <div class="mt-3 pt-3 border-top">
+                        <h6 class="mb-2"><i class="material-icons me-1">history</i> Recent Flights</h6>
+                        <div class="list-group list-group-flush">
+                            {% for entry in mapping.recent_entries %}
+                            <div class="list-group-item px-0 py-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ entry.date.strftime('%m/%d/%Y') }}</strong><br>
+                                        <small class="text-muted">{{ entry.departure_airport }} → {{ entry.arrival_airport }}</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <strong>{{ "%.1f"|format(entry.flight_time) }}h</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3 text-muted">
+                        <i class="material-icons mb-2">flight_takeoff</i><br>
+                        <small>No flights recorded yet</small>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">
+                            <i class="material-icons me-1">schedule</i>
+                            Mapped {{ mapping.created_at.strftime('%m/%d/%Y') }}
+                        </small>
+                        {% if mapping.logbook_entry_count > 0 %}
+                        <a href="{{ url_for('dashboard.logbook') }}?search={{ mapping.pilot_name }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            View Flights
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <!-- No mappings state -->
+    <div class="text-center py-5">
+        <i class="material-icons mb-4" style="font-size: 4rem; color: #e0e0e0;">flight_takeoff</i>
+        <h3 class="text-muted mb-3">No Aircraft Mapped</h3>
+        <p class="text-muted mb-4">You haven't been mapped as a pilot on any aircraft yet.</p>
+        
+        <div class="card bg-light mx-auto" style="max-width: 600px;">
+            <div class="card-body">
+                <h6 class="card-title"><i class="material-icons me-2">info</i> How to get aircraft access:</h6>
+                <ul class="list-unstyled mb-0 text-start">
+                    <li class="mb-2"><i class="material-icons me-2 text-primary">check_circle</i> Ask an aircraft owner to map you as a pilot</li>
+                    <li class="mb-2"><i class="material-icons me-2 text-primary">check_circle</i> System administrators can create pilot mappings</li>
+                    <li class="mb-2"><i class="material-icons me-2 text-primary">check_circle</i> Mappings link your name in logbooks to your user account</li>
+                    <li><i class="material-icons me-2 text-primary">check_circle</i> This enables automatic flight attribution from device sync</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+{% endblock %}

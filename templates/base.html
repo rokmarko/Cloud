@@ -444,12 +444,6 @@
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.devices') %}active{% endif %}" 
-                                   href="{{ url_for('dashboard.devices') }}">
-                                    <span class="material-icons">devices</span> Devices
-                                </a>
-                            </li>
-                            <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.checklists') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.checklists') }}">
                                     <span class="material-icons">checklist</span> Checklists
@@ -465,6 +459,23 @@
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.logbook') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.logbook') }}">
                                     <span class="material-icons">book</span> Logbook
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint == 'dashboard.my_aircraft_access' %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.my_aircraft_access') }}">
+                                    <span class="material-icons">flight</span> My Aircraft
+                                </a>
+                            </li>
+                            <li class="nav-item mt-3">
+                                <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                                    <span>Owner</span>
+                                </h6>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.devices') %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.devices') }}">
+                                    <span class="material-icons">devices</span> My Devices
                                 </a>
                             </li>
                             {% if current_user.is_admin %}
