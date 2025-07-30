@@ -17,6 +17,21 @@
             </button>
         </form>
     </div>
+    <div class="btn-group ms-3">
+        <form method="POST" action="{{ url_for('admin.clear_synced_entries') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-outline-danger" 
+                    {% if synced_entries_count == 0 %}disabled{% endif %}
+                    onclick="return confirm('⚠️ DANGER: This will permanently delete ALL {{ synced_entries_count }} synced logbook entries!\\n\\nThis action cannot be undone. Manual entries will NOT be affected.\\n\\nAre you absolutely sure you want to continue?')">
+                <span class="material-icons me-2">delete_sweep</span> 
+                {% if synced_entries_count == 0 %}
+                    No Synced Entries
+                {% else %}
+                    Clear Synced Entries ({{ synced_entries_count }})
+                {% endif %}
+            </button>
+        </form>
+    </div>
 </div>
 
 <!-- Sync Status Cards -->
@@ -53,12 +68,33 @@
     
     <div class="col-xl-3 col-md-6">
         <div class="stats-card">
-            <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">trending_up</span>
-            <h2 class="stats-number">{{ recent_entries|length }}</h2>
-            <p class="stats-label">Recent Entries</p>
+            <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">flight_takeoff</span>
+            <h2 class="stats-number">{{ synced_entries_count }}</h2>
+            <p class="stats-label">Synced Entries</p>
         </div>
     </div>
 </div>
+
+<!-- Clear Synced Entries Information -->
+{% if synced_entries_count > 0 %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="alert alert-warning border-0" style="background-color: #fff3cd;">
+            <div class="d-flex align-items-start">
+                <span class="material-icons me-3" style="color: #856404; font-size: 1.5rem;">info</span>
+                <div>
+                    <h6 class="alert-heading mb-2" style="color: #856404;">Synced Entries Management</h6>
+                    <p class="mb-0" style="color: #856404;">
+                        You currently have <strong>{{ synced_entries_count }} synced logbook entries</strong> that were automatically imported from ThingsBoard devices.
+                        These entries are linked to their source devices and contain aircraft information from device settings.
+                        Manual logbook entries created by users will <strong>not</strong> be affected by the clear operation.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Sync Job Status -->
 <div class="row g-4 mb-4">

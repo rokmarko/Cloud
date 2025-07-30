@@ -139,6 +139,11 @@
                             <td>
                                 <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
                                 <strong>{{ entry.aircraft_registration }}</strong>
+                                {% if entry.is_synced %}
+                                    <span class="badge bg-success ms-2" title="Synced from device: {{ entry.device.name if entry.device else 'Unknown Device' }}">
+                                        <span class="material-icons" style="font-size: 0.7rem;">sync</span> SYNC
+                                    </span>
+                                {% endif %}
                             </td>
                             <td>
                                 <span class="badge bg-secondary">{{ entry.aircraft_type }}</span>
@@ -199,6 +204,11 @@
                                 {% if entry.remarks %}
                                     <small class="text-muted">
                                         {{ entry.remarks[:50] }}{% if entry.remarks|length > 50 %}...{% endif %}
+                                    </small>
+                                {% elif entry.is_synced and entry.device %}
+                                    <small class="text-success">
+                                        <span class="material-icons" style="font-size: 0.8rem; vertical-align: middle;">sync</span>
+                                        Synced from {{ entry.device.name }}
                                     </small>
                                 {% else %}
                                     <span class="text-muted">-</span>

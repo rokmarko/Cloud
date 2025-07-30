@@ -2,6 +2,28 @@
 
 This document describes the private API endpoints for external servers to interact with KanardiaCloud.
 
+## Version History
+
+### v1.2.0 (2025-07-30)
+- **Device Linking**: Logbook entries now link to the syncing device via device_id
+- **Device Information Priority**: Aircraft registration and type now preferentially use device information
+- **Enhanced Sync Logic**: Improved duplicate detection based on device and flight details
+- **Visual Indicators**: Synced entries display device information and sync badges in UI
+
+### v1.1.0 (2025-07-30)
+- **Major Update**: Enhanced logbook model with time-based flight tracking
+- Added support for `takeoff_time` and `landing_time` fields
+- Automatic flight duration calculation from time values
+- Backward compatibility with legacy `flight_time` format
+- Improved midnight crossover handling
+- Enhanced time format support (multiple formats accepted)
+
+### v1.0.0 (2025-07-22)
+- Initial API release
+- Device claiming and management
+- Basic ThingsBoard integration
+- Health check endpoints
+
 ## Table of Contents
 1. [Authentication](#authentication)
 2. [Base URL](#base-url)
@@ -56,7 +78,8 @@ The ThingsBoard `syncLog` RPC method should return a JSON array of logbook entri
     "aircraft_type": "Cessna 172",
     "departure_airport": "KJFK",
     "arrival_airport": "KLGA",
-    "flight_time": 1.5,
+    "takeoff_time": "10:30:00",
+    "landing_time": "12:00:00",
     "pilot_in_command_time": 1.5,
     "dual_time": 0,
     "instrument_time": 0.2,
@@ -69,12 +92,96 @@ The ThingsBoard `syncLog` RPC method should return a JSON array of logbook entri
 ]
 ```
 
+#### Field Descriptions
+
+**Required Fields:**
+- `date`: Flight date in YYYY-MM-DD format
+- `aircraft_registration`: Aircraft registration/tail number
+- `departure_airport`: ICAO code of departure airport
+- `arrival_airport`: ICAO code of arrival airport
+
+**Time Fields (recommended):**
+- `takeoff_time`: Takeoff time in HH:MM:SS format (24-hour)
+- `landing_time`: Landing time in HH:MM:SS format (24-hour)
+
+**Legacy Support:**
+- `flight_time`: Total flight duration in hours (decimal). If `takeoff_time` and `landing_time` are not provided, this field will be used with default takeoff time of 10:00:00
+
+**Optional Fields:**
+- `aircraft_type`: Aircraft make/model
+- `pilot_in_command_time`: PIC time in hours (decimal)
+- `dual_time`: Dual instruction time in hours (decimal)
+- `instrument_time`: Instrument flight time in hours (decimal)
+- `night_time`: Night flight time in hours (decimal)
+- `cross_country_time`: Cross-country time in hours (decimal)
+- `landings_day`: Number of day landings (integer)
+- `landings_night`: Number of night landings (integer)
+- `remarks`: Additional notes or comments
+
+#### Time Calculation
+
+Flight time is automatically calculated from `takeoff_time` and `landing_time`. The system handles:
+- **Midnight crossovers**: Flights that land after midnight
+- **Time zone considerations**: All times treated as local aircraft time
+- **Precise duration calculations**: Results in decimal hours (e.g., 1.25 hours = 1 hour 15 minutes)
+- **Multiple time formats**: Supports HH:MM:SS, HH:MM, HH.MM.SS, HH.MM, and 12-hour formats
+
+#### Supported Time Formats
+
+The system accepts various time formats:
+- `"10:30:00"` - 24-hour with seconds (preferred)
+- `"10:30"` - 24-hour without seconds  
+- `"10.30.00"` - Period-separated with seconds
+- `"10.30"` - Period-separated without seconds
+- `"10:30:00 AM"` - 12-hour format with AM/PM
+
+#### Legacy Compatibility
+
+If only `flight_time` is provided (legacy format), the system will use a default takeoff time of 10:00:00 and calculate the landing time based on the flight duration. This ensures backward compatibility with existing integrations while encouraging migration to the more precise time-based format.
+
 ### Managing Device Sync
 
 Administrators can configure ThingsBoard sync for devices via the admin panel:
-1. Navigate to **Admin** → **ThingsBoard Sync** → **Configure Devices**
-2. Set the external device ID for each device that should sync
-3. Monitor sync status and recent entries in the sync dashboard
+
+1. **Configure Devices**: Navigate to **Admin** → **ThingsBoard Sync** → **Configure Devices**
+2. **Set External Device ID**: Assign ThingsBoard device IDs to KanardiaCloud devices
+3. **Monitor Sync Status**: View sync results and authentication status
+4. **Manual Sync**: Trigger immediate sync for testing or troubleshooting
+
+#### Sync Process Details
+
+- **Automatic Sync**: Runs every 5 minutes for all configured devices
+- **Device Linking**: All synced entries are linked to the originating device via device_id
+- **Aircraft Information**: Uses device registration and model preferentially over data payload
+- **Authentication**: Uses JWT tokens with automatic refresh
+- **Duplicate Prevention**: Checks existing entries by device, date, airports, and times
+- **Error Handling**: Logs failures and continues with other devices
+- **Time Calculations**: Automatically calculates flight duration from takeoff/landing times
+
+#### Aircraft Information Priority
+
+For synced entries, aircraft information is determined in this order:
+1. **Device Information** (preferred): Uses device.registration and device.model
+2. **Payload Fallback**: Uses aircraft_registration and aircraft_type from sync data
+3. **Default Values**: Uses "UNKNOWN" if neither source provides information
+
+This ensures that device-specific information takes precedence while maintaining compatibility with external data sources.
+
+#### Authentication Status
+
+The admin interface shows real-time ThingsBoard authentication status:
+- **Connection Status**: Connected/Disconnected
+- **Last Authentication**: Timestamp of last successful auth
+- **Token Expiry**: When the current JWT token expires
+- **Recent Errors**: Any authentication or sync errors
+
+#### Sync Statistics
+
+Recent sync information includes:
+- **Total Devices**: Number of devices configured for sync
+- **Synced Devices**: Number successfully synced in last run
+- **New Entries**: Number of new logbook entries created
+- **Errors**: Any sync failures or issues
 
 ## API Endpoints
 
@@ -253,6 +360,81 @@ Common HTTP status codes:
 - `500`: Internal server error
 
 ## Usage Examples
+
+### Logbook Sync Integration
+
+#### ThingsBoard RPC Response Example
+
+Example response from a ThingsBoard device's `syncLog` RPC method:
+
+```json
+[
+  {
+    "date": "2025-07-30",
+    "aircraft_registration": "N123AB",
+    "aircraft_type": "Cessna 172",
+    "departure_airport": "KJFK",
+    "arrival_airport": "KLGA", 
+    "takeoff_time": "09:15:30",
+    "landing_time": "10:45:15",
+    "pilot_in_command_time": 1.5,
+    "dual_time": 0,
+    "instrument_time": 0.25,
+    "night_time": 0,
+    "cross_country_time": 1.5,
+    "landings_day": 1,
+    "landings_night": 0,
+    "remarks": "Cross-country training flight"
+  },
+  {
+    "date": "2025-07-30",
+    "aircraft_registration": "N123AB", 
+    "aircraft_type": "Cessna 172",
+    "departure_airport": "KLGA",
+    "arrival_airport": "KJFK",
+    "takeoff_time": "14:30:00",
+    "landing_time": "15:45:00", 
+    "pilot_in_command_time": 1.25,
+    "dual_time": 0,
+    "instrument_time": 0,
+    "night_time": 0,
+    "cross_country_time": 1.25,
+    "landings_day": 1,
+    "landings_night": 0,
+    "remarks": "Return flight"
+  }
+]
+```
+
+#### Legacy Format Support
+
+For backward compatibility, the old format with `flight_time` is still supported:
+
+```json
+[
+  {
+    "date": "2025-07-30",
+    "aircraft_registration": "N123AB",
+    "aircraft_type": "Cessna 172", 
+    "departure_airport": "KJFK",
+    "arrival_airport": "KLGA",
+    "flight_time": 1.5,
+    "pilot_in_command_time": 1.5,
+    "dual_time": 0,
+    "instrument_time": 0.25,
+    "night_time": 0,
+    "cross_country_time": 1.5,
+    "landings_day": 1,
+    "landings_night": 0,
+    "remarks": "Training flight"
+  }
+]
+```
+
+When using the legacy format, the system will:
+- Use a default takeoff time of 10:00:00
+- Calculate landing time based on the flight duration
+- Preserve the exact flight time value provided
 
 ### Python Example
 

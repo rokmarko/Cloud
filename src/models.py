@@ -135,7 +135,9 @@ class LogbookEntry(db.Model):
     aircraft_registration = db.Column(db.String(20), nullable=False)
     departure_airport = db.Column(db.String(10), nullable=False)
     arrival_airport = db.Column(db.String(10), nullable=False)
-    flight_time = db.Column(db.Float, nullable=False)  # Hours
+    flight_time = db.Column(db.Float, nullable=False)  # Total flight time in hours
+    takeoff_time = db.Column(db.Time, nullable=True)  # Time of takeoff (optional)
+    landing_time = db.Column(db.Time, nullable=True)  # Time of landing (optional)
     pilot_in_command_time = db.Column(db.Float, default=0.0)
     dual_time = db.Column(db.Float, default=0.0)
     instrument_time = db.Column(db.Float, default=0.0)
@@ -149,6 +151,51 @@ class LogbookEntry(db.Model):
     
     # Foreign keys
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=True)  # Optional link to device for synced entries
+    
+    # Relationships
+    # Note: user relationship is handled by existing 'pilot' backref from User model
+    device = db.relationship('Device', backref=db.backref('device_logbook_entries', lazy=True))
+    
+    def get_calculated_flight_time(self) -> float:
+        """Calculate flight time in hours from takeoff and landing times."""
+        if not self.takeoff_time or not self.landing_time:
+            return self.flight_time or 0.0
+        
+        # Convert times to datetime objects for calculation
+        from datetime import datetime, timedelta
+        
+        # Use today's date as base for time calculation
+        base_date = self.date if self.date else datetime.now().date()
+        takeoff_dt = datetime.combine(base_date, self.takeoff_time)
+        landing_dt = datetime.combine(base_date, self.landing_time)
+        
+        # Handle flights that cross midnight
+        if landing_dt < takeoff_dt:
+            landing_dt += timedelta(days=1)
+        
+        # Calculate flight duration in hours
+        flight_duration = landing_dt - takeoff_dt
+        return round(flight_duration.total_seconds() / 3600, 2)
+    
+    def get_aircraft_info(self):
+        """Get aircraft information from linked device or stored values."""
+        if self.device:
+            return {
+                'registration': self.device.registration or self.aircraft_registration,
+                'type': self.device.model or self.aircraft_type
+            }
+        return {
+            'registration': self.aircraft_registration,
+            'type': self.aircraft_type
+        }
+    
+    @property
+    def is_synced(self) -> bool:
+        """Check if this entry was synced from a device."""
+        return self.device_id is not None
+        # is calculated from takeoff_time and landing_time.
+        pass
     
     def __repr__(self):
         return f'<LogbookEntry {self.date} {self.aircraft_registration}>'

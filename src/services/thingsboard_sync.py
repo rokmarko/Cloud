@@ -6,7 +6,7 @@ import requests
 import json
 import logging
 import os
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 from typing import List, Dict, Any, Optional
 from src.app import db
 from src.models import Device, LogbookEntry, User
@@ -23,10 +23,12 @@ class ThingsBoardSyncService:
         self.base_url = os.getenv('THINGSBOARD_URL', 'https://aetos.kanardia.eu:8088')
         self.username = os.getenv('THINGSBOARD_USERNAME', 'tenant@thingsboard.local')
         self.password = os.getenv('THINGSBOARD_PASSWORD', 'tenant')
-        self.tenant_id = os.getenv('THINGSBOARD_TENANT_ID', 'tenant')
+        # self.tenant_id = os.getenv('THINGSBOARD_TENANT_ID', 'tenant')
         self.timeout = 30  # seconds
         self._jwt_token = None
         self._token_expires_at = None
+        self._last_auth_check = None
+        self._last_auth_error = None
     
     def _authenticate(self) -> Optional[str]:
         """
@@ -55,6 +57,10 @@ class ThingsBoardSyncService:
         try:
             logger.debug(f"Authenticating with ThingsBoard as {self.username}")
             
+            # Update last check time
+            self._last_auth_check = datetime.now()
+            self._last_auth_error = None
+            
             response = requests.post(
                 url=auth_url,
                 json=payload,
@@ -69,7 +75,9 @@ class ThingsBoardSyncService:
             # Extract JWT token
             self._jwt_token = auth_data.get('token')
             if not self._jwt_token:
-                logger.error("No JWT token received from ThingsBoard authentication")
+                error_msg = "No JWT token received from ThingsBoard authentication"
+                logger.error(error_msg)
+                self._last_auth_error = error_msg
                 return None
             
             # Calculate token expiration (tokens usually expire in 1 hour, but we'll refresh every 45 minutes)
@@ -79,19 +87,25 @@ class ThingsBoardSyncService:
             return self._jwt_token
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"HTTP error during ThingsBoard authentication: {str(e)}")
+            error_msg = f"HTTP error during ThingsBoard authentication: {str(e)}"
+            logger.error(error_msg)
             self._jwt_token = None
             self._token_expires_at = None
+            self._last_auth_error = error_msg
             return None
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON response during ThingsBoard authentication: {str(e)}")
+            error_msg = f"Invalid JSON response during ThingsBoard authentication: {str(e)}"
+            logger.error(error_msg)
             self._jwt_token = None
             self._token_expires_at = None
+            self._last_auth_error = error_msg
             return None
         except Exception as e:
-            logger.error(f"Unexpected error during ThingsBoard authentication: {str(e)}")
+            error_msg = f"Unexpected error during ThingsBoard authentication: {str(e)}"
+            logger.error(error_msg)
             self._jwt_token = None
             self._token_expires_at = None
+            self._last_auth_error = error_msg
             return None
     
     def test_authentication(self) -> bool:
@@ -114,9 +128,11 @@ class ThingsBoardSyncService:
         return {
             'authenticated': self._jwt_token is not None,
             'token_expires_at': self._token_expires_at.isoformat() if self._token_expires_at else None,
+            'last_check': self._last_auth_check,
+            'error': self._last_auth_error,
             'base_url': self.base_url,
             'username': self.username,
-            'tenant_id': self.tenant_id
+            # 'tenant_id': self.tenant_id
         }
     
     def sync_all_devices(self) -> Dict[str, Any]:
@@ -308,27 +324,69 @@ class ThingsBoardSyncService:
             # Parse date (support various formats)
             entry_date = self._parse_date(date_str)
             
-            aircraft_registration = entry_data.get('aircraft_registration') or device.registration or 'UNKNOWN'
-            aircraft_type = entry_data.get('aircraft_type') or device.model or 'UNKNOWN'
+            # Use device information for aircraft details (preferred) or fall back to entry data
+            aircraft_registration = device.registration or entry_data.get('aircraft_registration', 'UNKNOWN')
+            aircraft_type = device.model or entry_data.get('aircraft_type', 'UNKNOWN')
+            
+            # Override with entry data if explicitly provided and device info is missing
+            if not device.registration and entry_data.get('aircraft_registration'):
+                aircraft_registration = entry_data.get('aircraft_registration')
+            if not device.model and entry_data.get('aircraft_type'):
+                aircraft_type = entry_data.get('aircraft_type')
+                
             departure_airport = entry_data.get('departure_airport', 'UNKNOWN')
             arrival_airport = entry_data.get('arrival_airport', 'UNKNOWN')
             
-            flight_time = float(entry_data.get('flight_time', 0))
-            if flight_time <= 0:
-                raise ValueError("Invalid flight_time: must be positive number")
+            # Parse takeoff and landing times
+            takeoff_time = self._parse_time(entry_data.get('takeoff_time'))
+            landing_time = self._parse_time(entry_data.get('landing_time'))
+            
+            # Calculate flight_time for database (required field)
+            flight_time = 0.0
+            
+            # If times are not provided, try to extract from flight_time (for backward compatibility)
+            if not takeoff_time or not landing_time:
+                flight_time = float(entry_data.get('flight_time', 0))
+                if flight_time <= 0:
+                    raise ValueError("Invalid flight_time or missing takeoff/landing times")
+                
+                # Default takeoff time to 10:00 AM if not provided
+                if not takeoff_time:
+                    from datetime import time
+                    takeoff_time = time(10, 0)
+                
+                # Calculate landing time from flight duration if not provided
+                if not landing_time:
+                    from datetime import datetime, timedelta
+                    takeoff_dt = datetime.combine(entry_date, takeoff_time)
+                    landing_dt = takeoff_dt + timedelta(hours=flight_time)
+                    landing_time = landing_dt.time()
+            else:
+                # Calculate flight_time from takeoff and landing times
+                from datetime import datetime, timedelta
+                takeoff_dt = datetime.combine(entry_date, takeoff_time)
+                landing_dt = datetime.combine(entry_date, landing_time)
+                
+                # Handle flights that cross midnight
+                if landing_dt < takeoff_dt:
+                    landing_dt += timedelta(days=1)
+                
+                # Calculate flight duration in hours
+                flight_duration = landing_dt - takeoff_dt
+                flight_time = round(flight_duration.total_seconds() / 3600, 2)
             
             # Check if entry already exists (avoid duplicates)
+            # For synced entries, check by device, date, and airports
+            # For manual entries, check by user, date, aircraft registration, and airports
             existing_entry = LogbookEntry.query.filter_by(
-                user_id=device.user_id,
+                device_id=device.id,
                 date=entry_date,
-                aircraft_registration=aircraft_registration,
-                departure_airport=departure_airport,
-                arrival_airport=arrival_airport,
-                flight_time=flight_time
+                takeoff_time=takeoff_time,
+                landing_time=landing_time
             ).first()
             
             if existing_entry:
-                logger.debug(f"Logbook entry already exists for {aircraft_registration} on {entry_date}")
+                logger.debug(f"Logbook entry already exists for device {device.name} on {entry_date}")
                 return False
             
             # Create new logbook entry
@@ -339,20 +397,23 @@ class ThingsBoardSyncService:
                 departure_airport=departure_airport,
                 arrival_airport=arrival_airport,
                 flight_time=flight_time,
-                pilot_in_command_time=float(entry_data.get('pilot_in_command_time', 0)),
+                takeoff_time=takeoff_time,
+                landing_time=landing_time,
+                pilot_in_command_time=float(entry_data.get('pilot_in_command_time', flight_time)),
                 dual_time=float(entry_data.get('dual_time', 0)),
                 instrument_time=float(entry_data.get('instrument_time', 0)),
                 night_time=float(entry_data.get('night_time', 0)),
                 cross_country_time=float(entry_data.get('cross_country_time', 0)),
                 landings_day=int(entry_data.get('landings_day', 0)),
                 landings_night=int(entry_data.get('landings_night', 0)),
-                remarks=entry_data.get('remarks', f'Synced from ThingsBoard device {device.external_device_id}'),
-                user_id=device.user_id
+                remarks=entry_data.get('remarks', f'Synced from ThingsBoard device {device.name}'),
+                user_id=device.user_id,
+                device_id=device.id  # Link to the syncing device
             )
             
             db.session.add(logbook_entry)
             
-            logger.debug(f"Created new logbook entry for {aircraft_registration} on {entry_date}")
+            logger.debug(f"Created new logbook entry for device {device.name} ({aircraft_registration}) on {entry_date}")
             return True
             
         except (ValueError, TypeError, KeyError) as e:
@@ -395,6 +456,54 @@ class ThingsBoardSyncService:
             pass
         
         raise ValueError(f"Unable to parse date: {date_str}")
+
+    def _parse_time(self, time_str: Optional[str]) -> Optional[time]:
+        """
+        Parse time string in various formats.
+        
+        Args:
+            time_str: Time string to parse
+            
+        Returns:
+            Parsed time object or None if invalid
+        """
+        if not time_str:
+            return None
+        
+        from datetime import time
+        
+        # Common time formats to try
+        formats = [
+            '%H:%M:%S',    # 10:30:00
+            '%H:%M',       # 10:30
+            '%H.%M.%S',    # 10.30.00
+            '%H.%M',       # 10.30
+            '%I:%M:%S %p', # 10:30:00 AM
+            '%I:%M %p',    # 10:30 AM
+        ]
+        
+        for fmt in formats:
+            try:
+                parsed_time = datetime.strptime(time_str, fmt).time()
+                return parsed_time
+            except ValueError:
+                continue
+        
+        # Try parsing as HH:MM without AM/PM
+        try:
+            parts = time_str.split(':')
+            if len(parts) >= 2:
+                hour = int(parts[0])
+                minute = int(parts[1])
+                second = int(parts[2]) if len(parts) > 2 else 0
+                
+                if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
+                    return time(hour, minute, second)
+        except (ValueError, IndexError):
+            pass
+        
+        logger.warning(f"Unable to parse time: {time_str}")
+        return None
 
 
 # Create singleton instance

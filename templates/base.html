@@ -492,6 +492,12 @@
                                 </a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint == 'admin.logbook' %}active{% endif %}" 
+                                   href="{{ url_for('admin.logbook') }}">
+                                    <span class="material-icons">flight_takeoff</span> Logbook
+                                </a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint in ['admin.sync_management', 'admin.sync_devices'] %}active{% endif %}" 
                                    href="{{ url_for('admin.sync_management') }}">
                                     <span class="material-icons">sync</span> ThingsBoard Sync

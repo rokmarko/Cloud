@@ -52,10 +52,10 @@ def calculate_logbook_totals(user_id):
                     LogbookEntry.user_id == user_id,
                     LogbookEntry.date >= initial_time.effective_date
                 ).scalar() or 0
-            ),
+            )
         }
         
-        # Add initial times
+        # Add initial times to entry totals
         totals = {
             'total_time': entry_totals['total_time'] + initial_time.total_time,
             'pic_time': entry_totals['pic_time'] + initial_time.pilot_in_command_time,
@@ -72,7 +72,7 @@ def calculate_logbook_totals(user_id):
             ).count()
         }
     else:
-        # Count all entries
+        # No initial time, just sum all entries
         totals = {
             'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter_by(user_id=user_id).scalar() or 0,
             'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter_by(user_id=user_id).scalar() or 0,

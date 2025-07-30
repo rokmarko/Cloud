@@ -49,6 +49,58 @@ def index():
                          recent_devices=recent_devices)
 
 
+@admin_bp.route('/logbook')
+@login_required
+@admin_required
+def logbook():
+    """Admin view of all logbook entries with device linking information."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    # Get filter parameters
+    show_synced = request.args.get('synced', 'all')  # all, synced, manual
+    device_id = request.args.get('device_id', type=int)
+    
+    # Build query
+    query = LogbookEntry.query
+    
+    # Filter by sync status
+    if show_synced == 'synced':
+        query = query.filter(LogbookEntry.device_id.isnot(None))
+    elif show_synced == 'manual':
+        query = query.filter(LogbookEntry.device_id.is_(None))
+    
+    # Filter by device
+    if device_id:
+        query = query.filter(LogbookEntry.device_id == device_id)
+    
+    # Order by date descending
+    query = query.order_by(LogbookEntry.date.desc(), LogbookEntry.created_at.desc())
+    
+    # Paginate
+    entries = query.paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    # Get devices for filter dropdown
+    devices = Device.query.filter_by(is_active=True).order_by(Device.registration).all()
+    
+    # Get statistics
+    total_entries = LogbookEntry.query.count()
+    synced_entries = LogbookEntry.query.filter(LogbookEntry.device_id.isnot(None)).count()
+    manual_entries = total_entries - synced_entries
+    
+    return render_template('admin/logbook.html',
+                         title='Logbook Management',
+                         entries=entries,
+                         devices=devices,
+                         show_synced=show_synced,
+                         selected_device_id=device_id,
+                         total_entries=total_entries,
+                         synced_entries=synced_entries,
+                         manual_entries=manual_entries)
+
+
 @admin_bp.route('/users')
 @login_required
 @admin_required
@@ -202,6 +254,9 @@ def sync_management():
         LogbookEntry.created_at >= yesterday
     ).order_by(LogbookEntry.created_at.desc()).limit(10).all()
     
+    # Get synced entries count
+    synced_entries_count = LogbookEntry.query.filter(LogbookEntry.device_id.isnot(None)).count()
+    
     # Get scheduler jobs
     jobs = task_scheduler.get_jobs()
     sync_job = next((job for job in jobs if job.id == 'thingsboard_sync'), None)
@@ -214,6 +269,7 @@ def sync_management():
                          total_devices=total_devices,
                          sync_enabled_devices=sync_enabled_devices,
                          recent_entries=recent_entries,
+                         synced_entries_count=synced_entries_count,
                          sync_job=sync_job,
                          auth_status=auth_status)
 
@@ -262,23 +318,19 @@ def run_sync_manually():
     try:
         current_app.logger.info(f"Manual sync triggered by admin user {current_user.nickname}")
         
-        # Run sync in background to avoid timeout
-        import threading
+        # Run sync synchronously to avoid context issues
+        results = thingsboard_sync.sync_all_devices()
+        current_app.logger.info(f"Manual sync completed: {results}")
         
-        def run_sync():
-            with current_app.app_context():
-                results = thingsboard_sync.sync_all_devices()
-                current_app.logger.info(f"Manual sync completed: {results}")
-        
-        sync_thread = threading.Thread(target=run_sync)
-        sync_thread.daemon = True
-        sync_thread.start()
-        
-        flash('ThingsBoard sync started manually. Check logs for results.', 'info')
+        # Show results in flash message
+        if results.get('errors'):
+            flash(f"Sync completed with errors: {results['new_entries']}/{results['total_entries']} entries synced. Check logs for details.", 'warning')
+        else:
+            flash(f"Sync completed successfully: {results['new_entries']}/{results['total_entries']} new entries synced from {results['synced_devices']}/{results['total_devices']} devices.", 'success')
         
     except Exception as e:
-        current_app.logger.error(f"Error starting manual sync: {str(e)}")
-        flash('Error starting sync. Please check logs.', 'error')
+        current_app.logger.error(f"Error during manual sync: {str(e)}")
+        flash('Error during sync. Please check logs.', 'error')
     
     return redirect(url_for('admin.sync_management'))
 
@@ -346,3 +398,46 @@ def sync_status_api():
         'recent_sync_entries': recent_sync_entries,
         'last_check': datetime.utcnow().isoformat()
     })
+
+
+@admin_bp.route('/sync/clear-entries', methods=['POST'])
+@login_required
+@admin_required
+def clear_synced_entries():
+    """Clear all synced logbook entries."""
+    try:
+        # Find all logbook entries that have a device_id (synced entries)
+        synced_entries = LogbookEntry.query.filter(LogbookEntry.device_id.isnot(None)).all()
+        count = len(synced_entries)
+        
+        if count == 0:
+            flash('No synced entries found to clear.', 'info')
+            return redirect(url_for('admin.sync_management'))
+        
+        # Get some statistics for logging
+        device_counts = {}
+        total_flight_time = 0
+        for entry in synced_entries:
+            device_name = entry.device.name if entry.device else f"Device ID {entry.device_id}"
+            device_counts[device_name] = device_counts.get(device_name, 0) + 1
+            total_flight_time += entry.flight_time or 0
+        
+        # Delete all synced entries
+        for entry in synced_entries:
+            db.session.delete(entry)
+        
+        db.session.commit()
+        
+        # Create detailed log message
+        devices_summary = ", ".join([f"{device}: {count} entries" for device, count in device_counts.items()])
+        current_app.logger.info(f"Admin {current_user.nickname} cleared {count} synced logbook entries "
+                              f"(Total flight time: {total_flight_time:.2f}h, Devices: {devices_summary})")
+        
+        flash(f'Successfully cleared {count} synced logbook entries (Total: {total_flight_time:.2f} flight hours).', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error clearing synced entries: {str(e)}")
+        flash('Error clearing synced entries. Please try again.', 'error')
+    
+    return redirect(url_for('admin.sync_management'))
