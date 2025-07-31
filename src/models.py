@@ -79,6 +79,7 @@ class Device(db.Model):
     serial_number = db.Column(db.String(100))
     registration = db.Column(db.String(20))  # For aircraft
     external_device_id = db.Column(db.String(100))  # ThingsBoard device ID for sync
+    current_logger_page = db.Column(db.BigInteger, nullable=True)  # Current page of device logger
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -276,3 +277,85 @@ class InitialLogbookTime(db.Model):
     
     def __repr__(self):
         return f'<InitialLogbookTime {self.user_id} {self.effective_date}>'
+
+
+class Event(db.Model):
+    """Event model for device events synced from ThingsBoard."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    date_time = db.Column(db.DateTime, nullable=True)  # Optional event timestamp
+    page_address = db.Column(db.BigInteger, nullable=False)  # Page address in device logger
+    total_time = db.Column(db.Integer, nullable=False)  # Total time in milliseconds
+    bitfield = db.Column(db.Integer, nullable=False, default=0)  # Event bitfield value
+    message = db.Column(db.String(500), nullable=True)  # Optional message/description for the event
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Foreign keys
+    device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
+    
+    # Relationships
+    device = db.relationship('Device', backref=db.backref('events', lazy='dynamic', cascade='all, delete-orphan'))
+    
+    # Event bit definitions
+    EVENT_BITS = {
+        'AnyEngStart': 0,      # 1 - Any engine start condition detected
+        'Takeoff': 1,          # 2 - Takeoff condition detected  
+        'Landing': 2,          # 4 - Aircraft has landed
+        'LastEngStop': 3,      # 8 - Last engine stop condition detected
+        'Flying': 4,           # 16 - Aircraft is flying
+        'EngRun1': 5,          # 32 - Engine 1 running
+        'EngRun2': 6,          # 64 - Engine 2 running
+        'Alarm': 7,            # 128 - Alarm condition
+        'FlushAndLink': 31     # Flush and link operation
+    }
+    
+    def has_event_bit(self, bit_name: str) -> bool:
+        """Check if a specific event bit is set."""
+        if bit_name not in self.EVENT_BITS:
+            return False
+        bit_position = self.EVENT_BITS[bit_name]
+        return (self.bitfield & (1 << bit_position)) != 0
+    
+    def get_active_events(self):
+        """Get list of active event names based on bitfield."""
+        active_events = []
+        for event_name, bit_position in self.EVENT_BITS.items():
+            if (self.bitfield & (1 << bit_position)) != 0:
+                active_events.append(event_name)
+        return active_events
+    
+    def set_event_bit(self, bit_name: str, value: bool = True):
+        """Set or clear a specific event bit."""
+        if bit_name not in self.EVENT_BITS:
+            return
+        bit_position = self.EVENT_BITS[bit_name]
+        if value:
+            self.bitfield |= (1 << bit_position)
+        else:
+            self.bitfield &= ~(1 << bit_position)
+    
+    @classmethod
+    def get_newest_event_for_device(cls, device_id: int):
+        """Get the newest event for a device based on highest page_address."""
+        return cls.query.filter_by(device_id=device_id).order_by(cls.page_address.desc()).first()
+    
+    def format_log_time(self):
+        """Format total_time (milliseconds) as H:M:S string."""
+        if not self.total_time:
+            return "0:00:00"
+        
+        # Convert milliseconds to seconds
+        total_seconds = int(self.total_time / 1000)
+        
+        # Calculate hours, minutes, seconds
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    
+    def __repr__(self):
+        active_events = self.get_active_events()
+        events_str = ', '.join(active_events) if active_events else 'None'
+        return f'<Event {self.id} Device:{self.device_id} Events:[{events_str}]>'

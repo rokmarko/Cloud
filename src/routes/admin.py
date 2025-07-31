@@ -7,7 +7,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from datetime import datetime, timedelta
 from src.app import db
-from src.models import User, Device, Checklist, LogbookEntry, Pilot
+from src.models import User, Device, Checklist, LogbookEntry, Pilot, Event
 from src.forms import PilotMappingForm
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
@@ -258,6 +258,9 @@ def sync_management():
     # Get synced entries count
     synced_entries_count = LogbookEntry.query.filter(LogbookEntry.device_id.isnot(None)).count()
     
+    # Get events count
+    events_count = Event.query.count()
+    
     # Get scheduler jobs
     jobs = task_scheduler.get_jobs()
     sync_job = next((job for job in jobs if job.id == 'thingsboard_sync'), None)
@@ -271,6 +274,7 @@ def sync_management():
                          sync_enabled_devices=sync_enabled_devices,
                          recent_entries=recent_entries,
                          synced_entries_count=synced_entries_count,
+                         events_count=events_count,
                          sync_job=sync_job,
                          auth_status=auth_status)
 
@@ -440,6 +444,56 @@ def clear_synced_entries():
         db.session.rollback()
         current_app.logger.error(f"Error clearing synced entries: {str(e)}")
         flash('Error clearing synced entries. Please try again.', 'error')
+    
+    return redirect(url_for('admin.sync_management'))
+
+
+@admin_bp.route('/sync/clear-events', methods=['POST'])
+@login_required
+@admin_required
+def clear_events():
+    """Clear all device events."""
+    try:
+        # Find all events
+        all_events = Event.query.all()
+        count = len(all_events)
+        
+        if count == 0:
+            flash('No events found to clear.', 'info')
+            return redirect(url_for('admin.sync_management'))
+        
+        # Get some statistics for logging
+        device_counts = {}
+        event_type_counts = {}
+        
+        for event in all_events:
+            device_name = event.device.name if event.device else f"Device ID {event.device_id}"
+            device_counts[device_name] = device_counts.get(device_name, 0) + 1
+            
+            # Count active event types
+            active_events = event.get_active_events()
+            for event_type in active_events:
+                event_type_counts[event_type] = event_type_counts.get(event_type, 0) + 1
+        
+        # Delete all events
+        for event in all_events:
+            db.session.delete(event)
+        
+        db.session.commit()
+        
+        # Create detailed log message
+        devices_summary = ", ".join([f"{device}: {count} events" for device, count in device_counts.items()])
+        event_types_summary = ", ".join([f"{event_type}: {count}" for event_type, count in event_type_counts.items()])
+        
+        current_app.logger.info(f"Admin {current_user.nickname} cleared {count} device events "
+                              f"(Devices: {devices_summary}, Event types: {event_types_summary})")
+        
+        flash(f'Successfully cleared {count} device events from {len(device_counts)} devices.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error clearing events: {str(e)}")
+        flash('Error clearing events. Please try again.', 'error')
     
     return redirect(url_for('admin.sync_management'))
 
@@ -614,3 +668,74 @@ def pilot_suggestions():
         .limit(10).all()
     
     return jsonify([p.pilot_name for p in pilot_names])
+
+
+@admin_bp.route('/events')
+@login_required
+@admin_required
+def events():
+    """Admin view of all device events."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    # Get filter parameters
+    device_id = request.args.get('device_id', type=int)
+    event_type = request.args.get('event_type', 'all')  # all, takeoff, landing, etc.
+    
+    # Build query
+    query = Event.query
+    
+    # Filter by device
+    if device_id:
+        query = query.filter(Event.device_id == device_id)
+    
+    # Filter by event type (bitfield)
+    if event_type != 'all' and event_type in Event.EVENT_BITS:
+        bit_position = Event.EVENT_BITS[event_type]
+        bit_mask = 1 << bit_position
+        query = query.filter(Event.bitfield.op('&')(bit_mask) != 0)
+    
+    # Order by date descending
+    query = query.order_by(Event.date_time.desc().nullslast(), Event.created_at.desc())
+    
+    # Paginate
+    events = query.paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    # Get all devices for filter dropdown
+    devices = Device.query.filter_by(is_active=True).all()
+    
+    # Get event type counts for statistics
+    event_stats = {}
+    for event_name, bit_position in Event.EVENT_BITS.items():
+        bit_mask = 1 << bit_position
+        count = Event.query.filter(Event.bitfield.op('&')(bit_mask) != 0).count()
+        event_stats[event_name] = count
+    
+    return render_template('admin/events.html',
+                         title='Device Events',
+                         events=events,
+                         devices=devices,
+                         event_types=Event.EVENT_BITS,
+                         event_stats=event_stats,
+                         selected_device_id=device_id,
+                         selected_event_type=event_type)
+
+
+@admin_bp.route('/events/<int:event_id>')
+@login_required
+@admin_required
+def event_detail(event_id):
+    """View detailed information about a specific event."""
+    event = Event.query.get_or_404(event_id)
+    
+    # Check if the current user has access to this event
+    # Events are only accessible to device owners or admins
+    if not current_user.is_admin and event.device.user_id != current_user.id:
+        flash('Access denied. You can only view events from your own devices.', 'error')
+        return redirect(url_for('admin.events'))
+    
+    return render_template('admin/event_detail.html',
+                         title=f'Event {event_id}',
+                         event=event)

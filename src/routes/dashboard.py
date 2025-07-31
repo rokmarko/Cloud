@@ -5,7 +5,7 @@ Dashboard and application feature routes
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from src.app import db
-from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot
+from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
 from src.forms import DeviceForm, ChecklistForm, LogbookEntryForm, InitialLogbookTimeForm
 import json
 
@@ -590,3 +590,77 @@ def api_delete_checklist(checklist_id):
         'success': True,
         'message': 'Checklist deleted successfully'
     })
+
+
+@dashboard_bp.route('/events')
+@login_required
+def events():
+    """Display events for user's devices."""
+    page = request.args.get('page', 1, type=int)
+    device_filter = request.args.get('device', type=int)
+    event_type_filter = request.args.get('event_type', '')
+    
+    # Get user's devices
+    user_devices = Device.query.filter_by(user_id=current_user.id, is_active=True).all()
+    device_ids = [device.id for device in user_devices]
+    
+    if not device_ids:
+        # User has no devices
+        events = []
+        pagination = None
+        device_filter_obj = None
+    else:
+        # Build query for events from user's devices
+        query = Event.query.filter(Event.device_id.in_(device_ids))
+        
+        # Apply device filter
+        device_filter_obj = None
+        if device_filter:
+            device_filter_obj = Device.query.filter_by(id=device_filter, user_id=current_user.id).first()
+            if device_filter_obj:
+                query = query.filter(Event.device_id == device_filter)
+        
+        # Apply event type filter
+        if event_type_filter and event_type_filter in Event.EVENT_BITS:
+            bit_position = Event.EVENT_BITS[event_type_filter]
+            bit_mask = 1 << bit_position
+            query = query.filter(Event.bitfield.op('&')(bit_mask) != 0)
+        
+        # Order by newest first (highest page_address)
+        query = query.order_by(Event.page_address.desc())
+        
+        # Paginate results
+        pagination = query.paginate(
+            page=page, per_page=50, error_out=False
+        )
+        events = pagination.items
+    
+    # Calculate statistics
+    stats = {}
+    if device_ids:
+        stats['total_events'] = Event.query.filter(Event.device_id.in_(device_ids)).count()
+        
+        # Count events by type
+        for event_name, bit_position in Event.EVENT_BITS.items():
+            bit_mask = 1 << bit_position
+            count = Event.query.filter(
+                Event.device_id.in_(device_ids),
+                Event.bitfield.op('&')(bit_mask) != 0
+            ).count()
+            stats[f'{event_name.lower()}_count'] = count
+    else:
+        stats = {'total_events': 0}
+        for event_name in Event.EVENT_BITS.keys():
+            stats[f'{event_name.lower()}_count'] = 0
+    
+    return render_template(
+        'dashboard/events.html',
+        events=events,
+        pagination=pagination,
+        user_devices=user_devices,
+        device_filter=device_filter,
+        device_filter_obj=device_filter_obj,
+        event_type_filter=event_type_filter,
+        event_types=Event.EVENT_BITS,
+        stats=stats
+    )

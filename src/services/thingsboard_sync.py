@@ -9,7 +9,7 @@ import os
 from datetime import datetime, date, timedelta, time
 from typing import List, Dict, Any, Optional
 from src.app import db
-from src.models import Device, LogbookEntry, User, Pilot
+from src.models import Device, LogbookEntry, User, Pilot, Event
 from flask import current_app
 
 
@@ -137,7 +137,7 @@ class ThingsBoardSyncService:
     
     def sync_all_devices(self) -> Dict[str, Any]:
         """
-        Sync logbook entries for all devices with external_device_id.
+        Sync logbook entries and events for all devices with external_device_id.
         
         Returns:
             Dict with sync results and statistics
@@ -147,6 +147,8 @@ class ThingsBoardSyncService:
             'synced_devices': 0,
             'total_entries': 0,
             'new_entries': 0,
+            'total_events': 0,
+            'new_events': 0,
             'errors': []
         }
         
@@ -162,10 +164,21 @@ class ThingsBoardSyncService:
             
             for device in devices:
                 try:
+                    # Sync logbook entries
                     device_result = self.sync_device(device)
+                    
+                    # Sync events
+                    events_result = self.sync_device_events(device)
+                    
                     results['synced_devices'] += 1
                     results['new_entries'] += device_result.get('new_entries', 0)
                     results['total_entries'] += device_result.get('total_entries', 0)
+                    results['new_events'] += events_result.get('new_events', 0)
+                    results['total_events'] += events_result.get('total_events', 0)
+                    
+                    # Combine errors
+                    results['errors'].extend(device_result.get('errors', []))
+                    results['errors'].extend(events_result.get('errors', []))
                     
                 except Exception as e:
                     error_msg = f"Failed to sync device {device.name} (ID: {device.external_device_id}): {str(e)}"
@@ -173,7 +186,7 @@ class ThingsBoardSyncService:
                     results['errors'].append(error_msg)
             
             logger.info(f"Sync completed: {results['synced_devices']}/{results['total_devices']} devices, "
-                       f"{results['new_entries']} new entries")
+                       f"{results['new_entries']} new entries, {results['new_events']} new events")
             
         except Exception as e:
             error_msg = f"Fatal error during sync: {str(e)}"
@@ -253,7 +266,7 @@ class ThingsBoardSyncService:
         
         payload = {
             "method": "syncLog",
-            "params": {}
+            "params": { "count": 200 }  # Adjust count as needed
         }
         
         headers = {
@@ -557,6 +570,195 @@ class ThingsBoardSyncService:
         except Exception as e:
             logger.error(f"Error resolving pilot user for '{pilot_name}': {str(e)}")
             return None  # Do not fall back to device owner
+
+    def sync_device_events(self, device: Device) -> Dict[str, Any]:
+        """
+        Sync events for a specific device.
+        
+        Args:
+            device: Device model instance with external_device_id
+            
+        Returns:
+            Dict with sync results for device events
+        """
+        result = {
+            'device_id': device.id,
+            'external_device_id': device.external_device_id,
+            'total_events': 0,
+            'new_events': 0,
+            'errors': []
+        }
+        
+        try:
+            # Call ThingsBoard RPC API for events
+            events_data = self._call_thingsboard_events_api(device.external_device_id, device.current_logger_page or 0)
+            
+            if not events_data:
+                logger.warning(f"No events data received for device {device.name}")
+                return result
+            
+            # Extract current logger page if provided
+            if isinstance(events_data, dict) and 'log_position' in events_data:
+                device.current_logger_page = events_data.get('log_position', 0)
+                device.updated_at = datetime.utcnow()
+                events_list = events_data.get('events', [])
+            else:
+                events_list = events_data if isinstance(events_data, list) else []
+            
+            result['total_events'] = len(events_list)
+            
+            # Process each event
+            for event in events_list:
+                if self._process_device_event(device, event):
+                    result['new_events'] += 1
+            
+            # Commit all changes for this device
+            db.session.commit()
+            
+            logger.info(f"Device {device.name} events: {result['new_events']}/{result['total_events']} new events")
+            
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Failed to sync events for device {device.external_device_id}: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+        
+        return result
+
+    def _call_thingsboard_events_api(self, device_id: str, last_event: int) -> Optional[Dict[str, Any]]:
+        """
+        Call ThingsBoard RPC API to get device events.
+        
+        Args:
+            device_id: External device ID in ThingsBoard
+            
+        Returns:
+            Events data dictionary or None if error
+        """
+        # Authenticate and get JWT token
+        jwt_token = self._authenticate()
+        if not jwt_token:
+            logger.error("Failed to authenticate with ThingsBoard")
+            return None
+        
+        url = f"{self.base_url}/api/plugins/rpc/twoway/{device_id}"
+        
+        payload = {
+            "method": "syncEvents",
+            "params": { "count": 100, "last_event": last_event }
+        }
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {jwt_token}',
+            'X-Authorization': f'Bearer {jwt_token}',
+            'User-Agent': 'KanardiaCloud/1.0'
+        }
+        
+        try:
+            logger.debug(f"Calling ThingsBoard events API for device {device_id}")
+            
+            response = requests.post(
+                url=url,
+                json=payload,
+                headers=headers,
+                timeout=self.timeout
+            )
+            
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            logger.debug(f"Retrieved events data from ThingsBoard for device {device_id}")
+            return data
+            
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout calling ThingsBoard events API for device {device_id}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"HTTP error calling ThingsBoard events API for device {device_id}: {str(e)}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response from ThingsBoard events API for device {device_id}: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error calling ThingsBoard events API for device {device_id}: {str(e)}")
+            return None
+
+    def _process_device_event(self, device: Device, event_data: Dict[str, Any]) -> bool:
+        """
+        Process a single device event from ThingsBoard.
+        
+        Args:
+            device: Device instance
+            event_data: Event data dictionary from ThingsBoard
+            
+        Returns:
+            True if new event was created, False if it already exists
+        """
+        try:
+            # Extract event fields
+            date_time_str = event_data.get('date_time')
+            page_address = event_data.get('page')
+            total_time = event_data.get('total_time')
+            bitfield = event_data.get('bits', 0)
+            message = event_data.get('message')  # Optional message field
+            
+            # Validate required fields (non-nullable)
+            if page_address is None:
+                logger.warning(f"Skipping event for device {device.name}: page_address is required")
+                return False
+            
+            if total_time is None:
+                logger.warning(f"Skipping event for device {device.name}: total_time is required")
+                return False
+            
+            # Parse date_time if provided
+            event_datetime = None
+            if date_time_str:
+                try:
+                    # Try different datetime formats
+                    for fmt in ['%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S']:
+                        try:
+                            event_datetime = datetime.strptime(date_time_str, fmt)
+                            break
+                        except ValueError:
+                            continue
+                except Exception as e:
+                    logger.warning(f"Could not parse date_time '{date_time_str}' for device {device.name}: {str(e)}")
+            
+            # Check if event already exists (by page_address and device)
+            existing_event = Event.query.filter_by(
+                device_id=device.id,
+                page_address=page_address
+            ).first()
+            
+            if existing_event:
+                logger.debug(f"Event already exists for device {device.name} at page {page_address}")
+                return False
+            
+            # Create new event
+            event = Event(
+                date_time=event_datetime,
+                page_address=page_address,
+                total_time=total_time,
+                bitfield=int(bitfield) if bitfield is not None else 0,
+                message=message,  # Include message field
+                device_id=device.id
+            )
+            
+            db.session.add(event)
+           
+            # Log the event creation with active event types
+            active_events = event.get_active_events()
+            events_str = ', '.join(active_events) if active_events else 'None'
+            logger.debug(f"Created event for device {device.name}: page={page_address}, events=[{events_str}]")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing event for device {device.name}: {str(e)}")
+            return False
 
 
 # Create singleton instance

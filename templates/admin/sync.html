@@ -31,6 +31,19 @@
                 {% endif %}
             </button>
         </form>
+        <form method="POST" action="{{ url_for('admin.clear_events') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-outline-danger ms-2" 
+                    {% if events_count == 0 %}disabled{% endif %}
+                    onclick="return confirm('⚠️ DANGER: This will permanently delete ALL {{ events_count }} device events!\\n\\nThis action cannot be undone. This includes all event history and status information.\\n\\nAre you absolutely sure you want to continue?')">
+                <span class="material-icons me-2">event_busy</span> 
+                {% if events_count == 0 %}
+                    No Events
+                {% else %}
+                    Clear Events ({{ events_count }})
+                {% endif %}
+            </button>
+        </form>
     </div>
 </div>
 

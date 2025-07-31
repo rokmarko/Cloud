@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Event Details</h2>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('admin.events') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Events
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Event Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Event Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <dl class="row">
+                                <dt class="col-sm-4">Event ID:</dt>
+                                <dd class="col-sm-8">{{ event.id }}</dd>
+                                
+                                <dt class="col-sm-4">Date/Time:</dt>
+                                <dd class="col-sm-8">
+                                    {% if event.date_time %}
+                                        {{ event.date_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Page Address:</dt>
+                                <dd class="col-sm-8">
+                                    {% if event.page_address %}
+                                        {{ event.page_address }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Log Time:</dt>
+                                <dd class="col-sm-8">
+                                    {% if event.total_time %}
+                                        {{ event.format_log_time() }} ({{ event.total_time }} ms)
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <dl class="row">
+                                <dt class="col-sm-5">Logger Page:</dt>
+                                <dd class="col-sm-7">
+                                    {% if event.current_logger_page %}
+                                        {{ event.current_logger_page }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-5">Bitfield Value:</dt>
+                                <dd class="col-sm-7">
+                                    {{ event.bitfield }}
+                                    <small class="text-muted">(0x{{ "%08X"|format(event.bitfield) }})</small>
+                                </dd>
+                                
+                                <dt class="col-sm-5">Message:</dt>
+                                <dd class="col-sm-7">
+                                    {% if event.message %}
+                                        {{ event.message }}
+                                    {% else %}
+                                        <span class="text-muted">No message</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-5">Created:</dt>
+                                <dd class="col-sm-7">{{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                                
+                                <dt class="col-sm-5">Updated:</dt>
+                                <dd class="col-sm-7">{{ event.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Device Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Device Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <dl class="row">
+                                <dt class="col-sm-4">Device Name:</dt>
+                                <dd class="col-sm-8">{{ event.device.name }}</dd>
+                                
+                                <dt class="col-sm-4">Device Type:</dt>
+                                <dd class="col-sm-8">{{ event.device.device_type }}</dd>
+                                
+                                <dt class="col-sm-4">Model:</dt>
+                                <dd class="col-sm-8">
+                                    {% if event.device.model %}
+                                        {{ event.device.model }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <dl class="row">
+                                <dt class="col-sm-4">Owner:</dt>
+                                <dd class="col-sm-8">{{ event.device.owner.nickname }}</dd>
+                                
+                                <dt class="col-sm-4">Registration:</dt>
+                                <dd class="col-sm-8">
+                                    {% if event.device.registration %}
+                                        {{ event.device.registration }}
+                                    {% else %}
+                                        <span class="text-muted">Not specified</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">External ID:</dt>
+                                <dd class="col-sm-8">
+                                    {% if event.device.external_device_id %}
+                                        {{ event.device.external_device_id }}
+                                    {% else %}
+                                        <span class="text-muted">Not set</span>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <!-- Active Events -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Active Events</h5>
+                </div>
+                <div class="card-body">
+                    {% set active_events = event.get_active_events() %}
+                    {% if active_events %}
+                        {% for active_event in active_events %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="badge bg-primary">{{ active_event }}</span>
+                                <span class="text-muted small">
+                                    Bit {{ event.EVENT_BITS[active_event] }}
+                                </span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No active events in this bitfield.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Bitfield Breakdown -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Bitfield Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Bit</th>
+                                    <th>Event</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for event_name, bit_position in event.EVENT_BITS.items() %}
+                                <tr>
+                                    <td>{{ bit_position }}</td>
+                                    <td>{{ event_name }}</td>
+                                    <td>
+                                        {% if event.has_event_bit(event_name) %}
+                                            <i class="fas fa-check text-success"></i>
+                                        {% else %}
+                                            <i class="fas fa-times text-muted"></i>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

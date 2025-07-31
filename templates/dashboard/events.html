@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- CSRF token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="bi bi-lightning-charge"></i> Device Events</h1>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h5 class="card-title">{{ stats.total_events }}</h5>
+                <p class="card-text mb-0">Total Events</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h5 class="card-title">{{ stats.takeoff_count }}</h5>
+                <p class="card-text mb-0">Takeoffs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <h5 class="card-title">{{ stats.landing_count }}</h5>
+                <p class="card-text mb-0">Landings</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h5 class="card-title">{{ stats.flying_count }}</h5>
+                <p class="card-text mb-0">Flying</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card bg-secondary text-white">
+            <div class="card-body text-center">
+                <h5 class="card-title">{{ stats.anyengstart_count }}</h5>
+                <p class="card-text mb-0">Engine Starts</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                <h5 class="card-title">{{ stats.alarm_count }}</h5>
+                <p class="card-text mb-0">Alarms</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label for="device" class="form-label">Filter by Device</label>
+                <select name="device" id="device" class="form-select">
+                    <option value="">All Devices</option>
+                    {% for device in user_devices %}
+                        <option value="{{ device.id }}" {% if device_filter == device.id %}selected{% endif %}>
+                            {{ device.name }} ({{ device.device_type.title() }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="event_type" class="form-label">Filter by Event Type</label>
+                <select name="event_type" id="event_type" class="form-select">
+                    <option value="">All Event Types</option>
+                    {% for event_name, bit_position in event_types.items() %}
+                        <option value="{{ event_name }}" {% if event_type_filter == event_name %}selected{% endif %}>
+                            {{ event_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="bi bi-funnel"></i> Filter
+                </button>
+                <a href="{{ url_for('dashboard.events') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i> Clear
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if events %}
+    <!-- Events Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-list-ul"></i> Events
+                {% if device_filter_obj %}
+                    for {{ device_filter_obj.name }}
+                {% endif %}
+                {% if event_type_filter %}
+                    - {{ event_type_filter }} Events
+                {% endif %}
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Date/Time</th>
+                            <th>Device</th>
+                            <th>Page Address</th>
+                            <th>Log Time</th>
+                            <th>Active Events</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in events %}
+                        <tr>
+                            <td>
+                                {% if event.date_time %}
+                                    <div>{{ event.date_time.strftime('%Y-%m-%d') }}</div>
+                                    <small class="text-muted">{{ event.date_time.strftime('%H:%M:%S') }}</small>
+                                {% else %}
+                                    <span class="text-muted">No timestamp</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-{% if event.device.device_type == 'aircraft' %}airplane{% elif event.device.device_type == 'gyro' %}person-check{% elif event.device.device_type == 'helicopter' %}airplane-engines{% elif event.device.device_type == 'trike' %}bicycle{% else %}airplane{% endif %} me-2"></i>
+                                    <div>
+                                        <div>{{ event.device.name }}</div>
+                                        <small class="text-muted">{{ event.device.device_type.title() }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <code>{{ event.page_address }}</code>
+                            </td>
+                            <td>
+                                {% if event.total_time %}
+                                    {{ event.format_log_time() }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set active_events = event.get_active_events() %}
+                                {% if active_events %}
+                                    {% for event_name in active_events %}
+                                        <span class="badge 
+                                            {% if event_name == 'Takeoff' %}bg-success
+                                            {% elif event_name == 'Landing' %}bg-warning
+                                            {% elif event_name == 'Flying' %}bg-info
+                                            {% elif event_name == 'AnyEngStart' %}bg-secondary
+                                            {% elif event_name == 'LastEngStop' %}bg-dark
+                                            {% elif event_name == 'Alarm' %}bg-danger
+                                            {% elif event_name == 'EngRun1' or event_name == 'EngRun2' %}bg-primary
+                                            {% else %}bg-light text-dark
+                                            {% endif %} me-1">
+                                            {{ event_name }}
+                                        </span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted">No active events</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if event.message %}
+                                    {{ event.message }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination.pages > 1 %}
+        <nav aria-label="Events pagination" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('dashboard.events', page=pagination.prev_num, device=device_filter, event_type=event_type_filter) }}">
+                            <i class="bi bi-chevron-left"></i> Previous
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link"><i class="bi bi-chevron-left"></i> Previous</span>
+                    </li>
+                {% endif %}
+
+                {% for page_num in pagination.iter_pages() %}
+                    {% if page_num %}
+                        {% if page_num != pagination.page %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('dashboard.events', page=page_num, device=device_filter, event_type=event_type_filter) }}">{{ page_num }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                        {% endif %}
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">…</span>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('dashboard.events', page=pagination.next_num, device=device_filter, event_type=event_type_filter) }}">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Next <i class="bi bi-chevron-right"></i></span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
+
+{% else %}
+    <!-- No Events Message -->
+    <div class="text-center py-5">
+        <i class="bi bi-lightning-charge-fill text-muted" style="font-size: 4rem;"></i>
+        <h3 class="mt-3">No Events Found</h3>
+        <p class="text-muted">
+            {% if not user_devices %}
+                No devices configured. <a href="{{ url_for('dashboard.add_device') }}">Add a device</a> to start tracking events.
+            {% elif device_filter_obj or event_type_filter %}
+                No events match your current filters. <a href="{{ url_for('dashboard.events') }}">Clear filters</a> to see all events.
+            {% else %}
+                No events have been synced from your devices yet.
+            {% endif %}
+        </p>
+    </div>
+{% endif %}
+
+{% endblock %}

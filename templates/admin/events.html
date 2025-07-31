@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Device Events</h2>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Admin
+            </a>
+        </div>
+    </div>
+
+    <!-- Event Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Event Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for event_name, count in event_stats.items() %}
+                        <div class="col-md-3 col-sm-6 mb-2">
+                            <div class="text-center">
+                                <div class="h4 mb-0 text-primary">{{ count }}</div>
+                                <small class="text-muted">{{ event_name }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <label for="device_id" class="form-label">Device</label>
+                    <select class="form-select" id="device_id" name="device_id">
+                        <option value="">All Devices</option>
+                        {% for device in devices %}
+                        <option value="{{ device.id }}" 
+                                {% if device.id == selected_device_id %}selected{% endif %}>
+                            {{ device.name }} ({{ device.owner.nickname }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="event_type" class="form-label">Event Type</label>
+                    <select class="form-select" id="event_type" name="event_type">
+                        <option value="all" {% if selected_event_type == 'all' %}selected{% endif %}>All Events</option>
+                        {% for event_name in event_types.keys() %}
+                        <option value="{{ event_name }}" 
+                                {% if event_name == selected_event_type %}selected{% endif %}>
+                            {{ event_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">&nbsp;</label>
+                    <div>
+                        <button type="submit" class="btn btn-primary">Filter</button>
+                        <a href="{{ url_for('admin.events') }}" class="btn btn-outline-secondary">Clear</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Events Table -->
+    <div class="card">
+        <div class="card-body">
+            {% if events.items %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Date/Time</th>
+                            <th>Device</th>
+                            <th>Page Address</th>
+                            <th>Log Time</th>
+                            <th>Active Events</th>
+                            <th>Message</th>
+                            <th>Logger Page</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in events.items %}
+                        <tr>
+                            <td>{{ event.id }}</td>
+                            <td>
+                                {% if event.date_time %}
+                                    {{ event.date_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ event.device.name }}</strong><br>
+                                <small class="text-muted">{{ event.device.owner.nickname }}</small>
+                            </td>
+                            <td>
+                                {% if event.page_address %}
+                                    {{ event.page_address }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if event.total_time %}
+                                    {{ event.format_log_time() }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set active_events = event.get_active_events() %}
+                                {% if active_events %}
+                                    {% for active_event in active_events %}
+                                        <span class="badge bg-primary me-1">{{ active_event }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted">None</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if event.message %}
+                                    {{ event.message }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if event.current_logger_page %}
+                                    {{ event.current_logger_page }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('admin.event_detail', event_id=event.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    View Details
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if events.pages > 1 %}
+            <nav aria-label="Events pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if events.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('admin.events', page=events.prev_num, device_id=selected_device_id, event_type=selected_event_type) }}">Previous</a>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in events.iter_pages() %}
+                        {% if page_num %}
+                            {% if page_num != events.page %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('admin.events', page=page_num, device_id=selected_device_id, event_type=selected_event_type) }}">{{ page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if events.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('admin.events', page=events.next_num, device_id=selected_device_id, event_type=selected_event_type) }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No Events Found</h5>
+                <p class="text-muted">No device events match your current filters.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <small class="text-muted">
+                Showing {{ events.items|length }} of {{ events.total }} events
+                {% if selected_device_id or selected_event_type != 'all' %}
+                (filtered)
+                {% endif %}
+            </small>
+        </div>
+        <div class="col-md-6 text-end">
+            <small class="text-muted">
+                Page {{ events.page }} of {{ events.pages }}
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}
