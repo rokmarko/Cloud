@@ -165,19 +165,19 @@ class ThingsBoardSyncService:
             for device in devices:
                 try:
                     # Sync logbook entries
-                    device_result = self.sync_device(device)
+                    # device_result = self.sync_device(device)
                     
                     # Sync events
                     events_result = self.sync_device_events(device)
                     
                     results['synced_devices'] += 1
-                    results['new_entries'] += device_result.get('new_entries', 0)
-                    results['total_entries'] += device_result.get('total_entries', 0)
+                    # results['new_entries'] += device_result.get('new_entries', 0)
+                    # results['total_entries'] += device_result.get('total_entries', 0)
                     results['new_events'] += events_result.get('new_events', 0)
                     results['total_events'] += events_result.get('total_events', 0)
                     
                     # Combine errors
-                    results['errors'].extend(device_result.get('errors', []))
+                    # results['errors'].extend(device_result.get('errors', []))
                     results['errors'].extend(events_result.get('errors', []))
                     
                 except Exception as e:
@@ -596,6 +596,8 @@ class ThingsBoardSyncService:
             if not events_data:
                 logger.warning(f"No events data received for device {device.name}")
                 return result
+            
+            # time.sleep(5)  # Rate limit to avoid overwhelming ThingsBoard
             
             # Extract current logger page if provided
             if isinstance(events_data, dict) and 'log_position' in events_data:
