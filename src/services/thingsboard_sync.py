@@ -647,7 +647,7 @@ class ThingsBoardSyncService:
         
         payload = {
             "method": "syncEvents",
-            "params": { "count": 100, "last_event": last_event }
+            "params": { "count": 2000, "last_event": last_event }
         }
         
         headers = {
