@@ -23,11 +23,21 @@
                     
                     <div class="row g-3">
                         <div class="col-md-6">
-                            {{ form.date.label(class="form-label") }}
-                            {{ form.date(class="form-control" + (" is-invalid" if form.date.errors else "")) }}
-                            {% if form.date.errors %}
+                            {{ form.takeoff_datetime.label(class="form-label") }}
+                            {{ form.takeoff_datetime(class="form-control" + (" is-invalid" if form.takeoff_datetime.errors else "")) }}
+                            {% if form.takeoff_datetime.errors %}
                                 <div class="invalid-feedback">
-                                    {% for error in form.date.errors %}{{ error }}{% endfor %}
+                                    {% for error in form.takeoff_datetime.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            {{ form.landing_datetime.label(class="form-label") }}
+                            {{ form.landing_datetime(class="form-control" + (" is-invalid" if form.landing_datetime.errors else "")) }}
+                            {% if form.landing_datetime.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.landing_datetime.errors %}{{ error }}{% endfor %}
                                 </div>
                             {% endif %}
                         </div>

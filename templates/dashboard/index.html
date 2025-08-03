@@ -86,7 +86,7 @@
                             <tbody>
                                 {% for entry in recent_entries %}
                                 <tr>
-                                    <td>{{ entry.date.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</td>
                                     <td>
                                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
                                         {{ entry.aircraft_registration }}

@@ -142,7 +142,7 @@
                 <tbody>
                     {% for entry in entries.items %}
                     <tr>
-                        <td>{{ entry.date.strftime('%m/%d/%Y') }}</td>
+                        <td>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</td>
                         <td>
                             {% if entry.pilot_name %}
                                 {{ entry.pilot_name }}

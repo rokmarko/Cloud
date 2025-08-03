@@ -75,8 +75,8 @@ def logbook():
     if device_id:
         query = query.filter(LogbookEntry.device_id == device_id)
     
-    # Order by date descending
-    query = query.order_by(LogbookEntry.date.desc(), LogbookEntry.created_at.desc())
+    # Order by takeoff datetime descending
+    query = query.order_by(LogbookEntry.takeoff_datetime.desc(), LogbookEntry.created_at.desc())
     
     # Paginate
     entries = query.paginate(
@@ -329,13 +329,51 @@ def run_sync_manually():
         
         # Show results in flash message
         if results.get('errors'):
-            flash(f"Sync completed with errors: {results['new_entries']}/{results['total_entries']} entries synced. Check logs for details.", 'warning')
+            flash(f"Sync completed with errors: {results['new_entries']}/{results['total_entries']} entries, "
+                  f"{results['new_events']} events, {results.get('new_logbook_entries', 0)} new/"
+                  f"{results.get('removed_logbook_entries', 0)} removed logbook entries. Check logs for details.", 'warning')
         else:
-            flash(f"Sync completed successfully: {results['new_entries']}/{results['total_entries']} new entries synced from {results['synced_devices']}/{results['total_devices']} devices.", 'success')
+            flash(f"Sync completed successfully: {results['new_entries']}/{results['total_entries']} new entries, "
+                  f"{results['new_events']} new events, {results.get('new_logbook_entries', 0)} new/"
+                  f"{results.get('removed_logbook_entries', 0)} removed logbook entries from events "
+                  f"synced from {results['synced_devices']}/{results['total_devices']} devices.", 'success')
         
     except Exception as e:
         current_app.logger.error(f"Error during manual sync: {str(e)}")
         flash('Error during sync. Please check logs.', 'error')
+    
+    return redirect(url_for('admin.sync_management'))
+
+
+@admin_bp.route('/sync/test-device-activity', methods=['POST'])
+@login_required
+@admin_required
+def test_device_activity():
+    """Test device activity check for debugging."""
+    try:
+        current_app.logger.info(f"Device activity test triggered by admin user {current_user.nickname}")
+        
+        # Find devices with external_device_id
+        devices = Device.query.filter(
+            Device.external_device_id.isnot(None),
+            Device.external_device_id != ''
+        ).all()
+        
+        if not devices:
+            flash('No devices with external_device_id found for testing.', 'info')
+            return redirect(url_for('admin.sync_management'))
+        
+        results = []
+        for device in devices:
+            is_active = thingsboard_sync._is_device_active_in_thingsboard(device.external_device_id)
+            results.append(f"Device {device.name} (ID: {device.external_device_id}): {'ACTIVE' if is_active else 'INACTIVE'}")
+            current_app.logger.info(f"Device activity check: {device.name} ({device.external_device_id}) -> {is_active}")
+        
+        flash(f"Device activity check completed. Results: {'; '.join(results)}", 'info')
+        
+    except Exception as e:
+        current_app.logger.error(f"Error during device activity test: {str(e)}")
+        flash(f'Error during device activity test: {str(e)}', 'error')
     
     return redirect(url_for('admin.sync_management'))
 

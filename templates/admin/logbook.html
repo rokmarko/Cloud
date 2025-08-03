@@ -117,7 +117,7 @@
                             <tbody>
                                 {% for entry in entries.items %}
                                 <tr>
-                                    <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ entry.takeoff_datetime.strftime('%Y-%m-%d') }}</td>
                                     <td>
                                         <strong>{{ entry.aircraft_registration or 'N/A' }}</strong><br>
                                         <small class="text-muted">{{ entry.aircraft_type or 'Unknown' }}</small>

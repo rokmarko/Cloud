@@ -16,6 +16,12 @@
                 <span class="material-icons me-2">sync</span> Run Sync Now
             </button>
         </form>
+        <form method="POST" action="{{ url_for('admin.test_device_activity') }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-outline-info ms-2" onclick="return confirm('Test device activity status in ThingsBoard?')">
+                <span class="material-icons me-2">wifi_protected_setup</span> Test Device Activity
+            </button>
+        </form>
     </div>
     <div class="btn-group ms-3">
         <form method="POST" action="{{ url_for('admin.clear_synced_entries') }}" class="d-inline">
@@ -250,7 +256,7 @@
                             <tbody>
                                 {% for entry in recent_entries %}
                                 <tr>
-                                    <td>{{ entry.date.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</td>
                                     <td>
                                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
                                         {{ entry.aircraft_registration }}

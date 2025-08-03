@@ -3,7 +3,7 @@ Forms for authentication and user management
 """
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, SelectField, DateField, FloatField, IntegerField
+from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, SelectField, DateField, FloatField, IntegerField, DateTimeLocalField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError, Optional
 from src.models import User
 
@@ -94,12 +94,14 @@ class ChecklistForm(FlaskForm):
 
 class LogbookEntryForm(FlaskForm):
     """Logbook entry form."""
-    date = DateField('Date', validators=[DataRequired()])
+    takeoff_datetime = DateTimeLocalField('Takeoff Date/Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
+    landing_datetime = DateTimeLocalField('Landing Date/Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
     aircraft_type = StringField('Aircraft Type', validators=[DataRequired(), Length(max=50)])
     aircraft_registration = StringField('Aircraft Registration', validators=[DataRequired(), Length(max=20)])
     departure_airport = StringField('Departure Airport', validators=[DataRequired(), Length(max=10)])
     arrival_airport = StringField('Arrival Airport', validators=[DataRequired(), Length(max=10)])
-    flight_time = FloatField('Total Flight Time (hours)', validators=[DataRequired()])
+    flight_time = FloatField('Total Flight Time (hours)', validators=[Optional()],
+                           description='Leave blank to auto-calculate from takeoff/landing times')
     pilot_in_command_time = FloatField('PIC Time (hours)', validators=[Optional()])
     dual_time = FloatField('Dual Time (hours)', validators=[Optional()])
     instrument_time = FloatField('Instrument Time (hours)', validators=[Optional()])

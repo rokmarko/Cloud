@@ -149,6 +149,8 @@ class ThingsBoardSyncService:
             'new_entries': 0,
             'total_events': 0,
             'new_events': 0,
+            'new_logbook_entries': 0,
+            'removed_logbook_entries': 0,
             'errors': []
         }
         
@@ -175,6 +177,8 @@ class ThingsBoardSyncService:
                     # results['total_entries'] += device_result.get('total_entries', 0)
                     results['new_events'] += events_result.get('new_events', 0)
                     results['total_events'] += events_result.get('total_events', 0)
+                    results['new_logbook_entries'] += events_result.get('new_logbook_entries', 0)
+                    results['removed_logbook_entries'] += events_result.get('removed_logbook_entries', 0)
                     
                     # Combine errors
                     # results['errors'].extend(device_result.get('errors', []))
@@ -186,7 +190,9 @@ class ThingsBoardSyncService:
                     results['errors'].append(error_msg)
             
             logger.info(f"Sync completed: {results['synced_devices']}/{results['total_devices']} devices, "
-                       f"{results['new_entries']} new entries, {results['new_events']} new events")
+                       f"{results['new_entries']} new entries, {results['new_events']} new events, "
+                       f"{results['new_logbook_entries']} new logbook entries, "
+                       f"{results['removed_logbook_entries']} removed logbook entries from events")
             
         except Exception as e:
             error_msg = f"Fatal error during sync: {str(e)}"
@@ -194,6 +200,71 @@ class ThingsBoardSyncService:
             results['errors'].append(error_msg)
         
         return results
+    
+    def _is_device_active_in_thingsboard(self, device_id: str) -> bool:
+        """
+        Check if device is active in ThingsBoard using telemetry API.
+        
+        Args:
+            device_id: External device ID in ThingsBoard
+            
+        Returns:
+            True if device is active, False otherwise
+        """
+        # Authenticate and get JWT token
+        jwt_token = self._authenticate()
+        if not jwt_token:
+            logger.error("Failed to authenticate with ThingsBoard for device activity check")
+            return False
+        
+        # ThingsBoard telemetry API endpoint for device attributes
+        url = f"{self.base_url}/api/plugins/telemetry/DEVICE/{device_id}/values/attributes?keys=active"
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {jwt_token}',
+            'X-Authorization': f'Bearer {jwt_token}',
+            'User-Agent': 'KanardiaCloud/1.0'
+        }
+        
+        # Add query parameter to get only the 'active' attribute
+        # params = {'keys': 'active'}
+        
+        try:
+            logger.debug(f"Checking device activity status for device {device_id}")
+            
+            response = requests.get(
+                url=url,
+                headers=headers,
+                # params=params,
+                timeout=self.timeout
+            )
+            
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Check if 'active' attribute exists and is true
+            if isinstance(data, list) and len(data) > 0:
+                active_attr = data[0]
+                if active_attr.get('key') == 'active':
+                    is_active = active_attr.get('value', False)
+                    logger.debug(f"Device {device_id} active status: {is_active}")
+                    return is_active
+            
+            # If no active attribute found, log warning and assume inactive
+            logger.warning(f"No 'active' attribute found for device {device_id}, assuming inactive")
+            return False
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"HTTP error checking device activity for {device_id}: {str(e)}")
+            return False
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response checking device activity for {device_id}: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error checking device activity for {device_id}: {str(e)}")
+            return False
     
     def sync_device(self, device: Device) -> Dict[str, Any]:
         """
@@ -256,6 +327,11 @@ class ThingsBoardSyncService:
         Returns:
             List of logbook entry dictionaries or None if error
         """
+        # First check if device is active in ThingsBoard
+        if not self._is_device_active_in_thingsboard(device_id):
+            logger.info(f"Device {device_id} is not active in ThingsBoard, skipping RPC call")
+            return None
+        
         # Authenticate and get JWT token
         jwt_token = self._authenticate()
         if not jwt_token:
@@ -360,6 +436,10 @@ class ThingsBoardSyncService:
             # Calculate flight_time for database (required field)
             flight_time = 0.0
             
+            # Create datetime objects
+            takeoff_datetime = None
+            landing_datetime = None
+            
             # If times are not provided, try to extract from flight_time (for backward compatibility)
             if not takeoff_time or not landing_time:
                 flight_time = float(entry_data.get('flight_time', 0))
@@ -377,28 +457,30 @@ class ThingsBoardSyncService:
                     takeoff_dt = datetime.combine(entry_date, takeoff_time)
                     landing_dt = takeoff_dt + timedelta(hours=flight_time)
                     landing_time = landing_dt.time()
+                
+                # Create final datetime objects
+                takeoff_datetime = datetime.combine(entry_date, takeoff_time)
+                landing_datetime = datetime.combine(entry_date, landing_time)
             else:
                 # Calculate flight_time from takeoff and landing times
                 from datetime import datetime, timedelta
-                takeoff_dt = datetime.combine(entry_date, takeoff_time)
-                landing_dt = datetime.combine(entry_date, landing_time)
+                takeoff_datetime = datetime.combine(entry_date, takeoff_time)
+                landing_datetime = datetime.combine(entry_date, landing_time)
                 
                 # Handle flights that cross midnight
-                if landing_dt < takeoff_dt:
-                    landing_dt += timedelta(days=1)
+                if landing_datetime < takeoff_datetime:
+                    landing_datetime += timedelta(days=1)
                 
                 # Calculate flight duration in hours
-                flight_duration = landing_dt - takeoff_dt
+                flight_duration = landing_datetime - takeoff_datetime
                 flight_time = round(flight_duration.total_seconds() / 3600, 2)
             
             # Check if entry already exists (avoid duplicates)
-            # For synced entries, check by device, date, and airports
-            # For manual entries, check by user, date, aircraft registration, and airports
+            # For synced entries, check by device, takeoff/landing datetime
             existing_entry = LogbookEntry.query.filter_by(
                 device_id=device.id,
-                date=entry_date,
-                takeoff_time=takeoff_time,
-                landing_time=landing_time
+                takeoff_datetime=takeoff_datetime,
+                landing_datetime=landing_datetime
             ).first()
             
             if existing_entry:
@@ -424,14 +506,13 @@ class ThingsBoardSyncService:
                 entry_user_id = device.user_id
             
             logbook_entry = LogbookEntry(
-                date=entry_date,
+                takeoff_datetime=takeoff_datetime,
+                landing_datetime=landing_datetime,
                 aircraft_type=aircraft_type,
                 aircraft_registration=aircraft_registration,
                 departure_airport=departure_airport,
                 arrival_airport=arrival_airport,
                 flight_time=flight_time,
-                takeoff_time=takeoff_time,
-                landing_time=landing_time,
                 pilot_in_command_time=float(entry_data.get('pilot_in_command_time', flight_time)),
                 dual_time=float(entry_data.get('dual_time', 0)),
                 instrument_time=float(entry_data.get('instrument_time', 0)),
@@ -593,19 +674,17 @@ class ThingsBoardSyncService:
             # Call ThingsBoard RPC API for events
             events_data = self._call_thingsboard_events_api(device.external_device_id, device.current_logger_page or 0)
             
-            if not events_data:
-                logger.warning(f"No events data received for device {device.name}")
-                return result
-            
-            # time.sleep(5)  # Rate limit to avoid overwhelming ThingsBoard
-            
-            # Extract current logger page if provided
-            if isinstance(events_data, dict) and 'log_position' in events_data:
-                device.current_logger_page = events_data.get('log_position', 0)
-                device.updated_at = datetime.utcnow()
-                events_list = events_data.get('events', [])
+            events_list = []
+            if events_data:
+                # Extract current logger page if provided
+                if isinstance(events_data, dict) and 'log_position' in events_data:
+                    device.current_logger_page = events_data.get('log_position', 0)
+                    device.updated_at = datetime.utcnow()
+                    events_list = events_data.get('events', [])
+                else:
+                    events_list = events_data if isinstance(events_data, list) else []
             else:
-                events_list = events_data if isinstance(events_data, list) else []
+                logger.warning(f"No events data received for device {device.name}")
             
             result['total_events'] = len(events_list)
             
@@ -613,6 +692,25 @@ class ThingsBoardSyncService:
             for event in events_list:
                 if self._process_device_event(device, event):
                     result['new_events'] += 1
+            
+            # Always rebuild logbook entries from ALL events after sync (not just new events)
+            logger.info(f"Rebuilding complete logbook from all events for device {device.name}")
+            try:
+                logbook_results = self._rebuild_complete_logbook_from_events(device)
+                result['new_logbook_entries'] = logbook_results.get('new_entries', 0)
+                result['updated_logbook_entries'] = logbook_results.get('updated_entries', 0)
+                result['removed_logbook_entries'] = logbook_results.get('removed_entries', 0)
+                if logbook_results.get('errors'):
+                    result['errors'].extend(logbook_results['errors'])
+                
+                logger.info(f"Logbook rebuild completed for device {device.name}: "
+                           f"{result.get('new_logbook_entries', 0)} new, "
+                           f"{result.get('updated_logbook_entries', 0)} updated, "
+                           f"{result.get('removed_logbook_entries', 0)} removed entries")
+            except Exception as e:
+                error_msg = f"Failed to rebuild logbook from events for device {device.name}: {str(e)}"
+                logger.error(error_msg)
+                result['errors'].append(error_msg)
             
             # Commit all changes for this device
             db.session.commit()
@@ -637,6 +735,11 @@ class ThingsBoardSyncService:
         Returns:
             Events data dictionary or None if error
         """
+        # First check if device is active in ThingsBoard
+        if not self._is_device_active_in_thingsboard(device_id):
+            logger.info(f"Device {device_id} is not active in ThingsBoard, skipping events RPC call")
+            return None
+        
         # Authenticate and get JWT token
         jwt_token = self._authenticate()
         if not jwt_token:
@@ -761,6 +864,325 @@ class ThingsBoardSyncService:
         except Exception as e:
             logger.error(f"Error processing event for device {device.name}: {str(e)}")
             return False
+    
+    def _rebuild_complete_logbook_from_events(self, device: Device) -> Dict[str, Any]:
+        """
+        Rebuild complete logbook from ALL events for a device.
+        This clears existing event-generated entries and recreates them from all events.
+        
+        Args:
+            device: Device instance
+            
+        Returns:
+            Dict with results of logbook entry rebuild
+        """
+        result = {
+            'new_entries': 0,
+            'updated_entries': 0,
+            'removed_entries': 0,
+            'errors': []
+        }
+        
+        try:
+            # Step 1: Clear existing event-generated logbook entries for this device
+            # We identify event-generated entries by checking if they have a device_id and
+            # contain specific text in remarks indicating they were generated from events
+            existing_event_entries = LogbookEntry.query.filter(
+                LogbookEntry.device_id == device.id,
+                LogbookEntry.remarks.like('%Generated from device events%')
+            ).all()
+            
+            logger.debug(f"Found {len(existing_event_entries)} existing event-generated logbook entries for device {device.name}")
+            
+            # Remove existing event-generated entries
+            for entry in existing_event_entries:
+                db.session.delete(entry)
+                result['removed_entries'] += 1
+            
+            if result['removed_entries'] > 0:
+                logger.info(f"Removed {result['removed_entries']} existing event-generated logbook entries for device {device.name}")
+            
+            # Step 2: Build new logbook entries from ALL events
+            logbook_results = self._build_logbook_entries_from_events(device)
+            result['new_entries'] = logbook_results.get('new_entries', 0)
+            result['updated_entries'] = logbook_results.get('updated_entries', 0)
+            if logbook_results.get('errors'):
+                result['errors'].extend(logbook_results['errors'])
+            
+            logger.info(f"Logbook rebuild for device {device.name}: "
+                       f"removed {result['removed_entries']}, created {result['new_entries']} entries")
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"Error rebuilding complete logbook from events for device {device.name}: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+            return result
+    
+    def _build_logbook_entries_from_events(self, device: Device) -> Dict[str, Any]:
+        """
+        Build logbook entries from takeoff/landing event pairs.
+        
+        Args:
+            device: Device instance
+            
+        Returns:
+            Dict with results of logbook entry creation
+        """
+        result = {
+            'new_entries': 0,
+            'updated_entries': 0,
+            'errors': []
+        }
+        
+        try:
+            # Get all takeoff and landing events for this device, ordered by total_time
+            events = Event.query.filter_by(device_id=device.id).order_by(Event.total_time.asc()).all()
+            
+            # Filter for takeoff and landing events
+            takeoff_events = [e for e in events if e.has_event_bit('Takeoff')]
+            landing_events = [e for e in events if e.has_event_bit('Landing')]
+            
+            logger.debug(f"Found {len(takeoff_events)} takeoff events and {len(landing_events)} landing events for device {device.name}")
+            
+            if not takeoff_events or not landing_events:
+                logger.info(f"No complete takeoff/landing pairs found for device {device.name}")
+                return result
+            
+            # Build flight sequences from events
+            flight_sequences = self._build_flight_sequences(takeoff_events, landing_events)
+            
+            logger.debug(f"Built {len(flight_sequences)} flight sequences for device {device.name}")
+            
+            # Create logbook entries from flight sequences
+            for sequence in flight_sequences:
+                try:
+                    if self._create_logbook_entry_from_events(device, sequence):
+                        result['new_entries'] += 1
+                except Exception as e:
+                    error_msg = f"Failed to create logbook entry from events: {str(e)}"
+                    logger.error(error_msg)
+                    result['errors'].append(error_msg)
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"Error building logbook entries from events for device {device.name}: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+            return result
+    
+    def _build_flight_sequences(self, takeoff_events: List[Event], landing_events: List[Event]) -> List[Dict[str, Any]]:
+        """
+        Build flight sequences by pairing takeoff and landing events.
+        Groups multiple landings within 120 seconds into single flights.
+        
+        Args:
+            takeoff_events: List of takeoff events
+            landing_events: List of landing events
+            
+        Returns:
+            List of flight sequence dictionaries
+        """
+        sequences = []
+        used_landings = set()
+        
+        for takeoff in takeoff_events:
+            # Find landings that occur after this takeoff
+            valid_landings = [
+                landing for landing in landing_events 
+                if landing.total_time > takeoff.total_time and landing.id not in used_landings
+            ]
+            
+            if not valid_landings:
+                continue
+            
+            # Sort landings by time
+            valid_landings.sort(key=lambda e: e.total_time)
+            
+            # Start with the first landing after takeoff
+            sequence_landings = [valid_landings[0]]
+            used_landings.add(valid_landings[0].id)
+            
+            # Look for additional landings within 120 seconds
+            last_landing_time = valid_landings[0].total_time
+            
+            for landing in valid_landings[1:]:
+                time_diff_ms = landing.total_time - last_landing_time
+                time_diff_seconds = time_diff_ms / 1000.0
+                
+                if time_diff_seconds <= 120:  # Within 120 seconds
+                    sequence_landings.append(landing)
+                    used_landings.add(landing.id)
+                    last_landing_time = landing.total_time
+                else:
+                    break  # Gap too large, end this sequence
+            
+            # Create flight sequence
+            sequence = {
+                'takeoff_event': takeoff,
+                'landing_events': sequence_landings,
+                'takeoff_time_ms': takeoff.total_time,
+                'final_landing_time_ms': sequence_landings[-1].total_time,
+                'total_landings': len(sequence_landings)
+            }
+            
+            sequences.append(sequence)
+            
+            logger.debug(f"Created flight sequence: takeoff at {takeoff.total_time}ms, "
+                        f"{len(sequence_landings)} landings ending at {sequence_landings[-1].total_time}ms")
+        
+        return sequences
+    
+    def _clean_duplicate_link_messages(self, message: str) -> str:
+        """
+        Clean up duplicate link messages from an event message.
+        
+        Args:
+            message: The original message string
+            
+        Returns:
+            Cleaned message with duplicate link messages removed
+        """
+        if not message:
+            return message
+            
+        import re
+        
+        # Find all unique logbook entry IDs mentioned in the message
+        pattern = r'Linked to Logbook Entry (\d+)'
+        matches = re.findall(pattern, message)
+        unique_ids = list(set(matches))
+        
+        # Remove all existing link messages
+        cleaned = re.sub(r'\[?Linked to Logbook Entry \d+\]?\s*', '', message).strip()
+        
+        # Add back unique link messages
+        if unique_ids:
+            link_messages = [f"[Linked to Logbook Entry {entry_id}]" for entry_id in sorted(unique_ids)]
+            if cleaned:
+                cleaned = f"{cleaned} {' '.join(link_messages)}"
+            else:
+                cleaned = ' '.join(link_messages)
+        
+        return cleaned
+
+    def _create_logbook_entry_from_events(self, device: Device, flight_sequence: Dict[str, Any]) -> bool:
+        """
+        Create a logbook entry from a flight sequence (takeoff + landings).
+        
+        Args:
+            device: Device instance
+            flight_sequence: Flight sequence dictionary from _build_flight_sequences
+            
+        Returns:
+            True if new entry was created, False if it already exists
+        """
+        try:
+            takeoff_event = flight_sequence['takeoff_event']
+            landing_events = flight_sequence['landing_events']
+            final_landing_event = landing_events[-1]
+            
+            # Calculate flight duration
+            flight_duration_ms = final_landing_event.total_time - takeoff_event.total_time
+            flight_duration_hours = flight_duration_ms / (1000 * 60 * 60)  # Convert to hours
+            
+            # Create takeoff and landing datetime objects
+            if takeoff_event.date_time:
+                takeoff_datetime = takeoff_event.date_time
+                
+                # Calculate landing datetime
+                landing_datetime = takeoff_event.date_time + timedelta(milliseconds=flight_duration_ms)
+            else:
+                # Fallback to current date if no timestamp available
+                current_date = datetime.utcnow().date()
+                takeoff_datetime = datetime.combine(current_date, time(10, 0))  # Default 10:00 AM
+                
+                # Calculate landing datetime from duration
+                landing_datetime = takeoff_datetime + timedelta(hours=flight_duration_hours)
+            
+            # Check if logbook entry already exists for this event sequence
+            existing_entry = LogbookEntry.query.filter_by(
+                device_id=device.id,
+                takeoff_datetime=takeoff_datetime,
+                landing_datetime=landing_datetime
+            ).first()
+            
+            if existing_entry:
+                logger.debug(f"Logbook entry already exists for flight sequence starting at {takeoff_event.total_time}ms")
+                return False
+            
+            # Create logbook entry
+            logbook_entry = LogbookEntry(
+                takeoff_datetime=takeoff_datetime,
+                landing_datetime=landing_datetime,
+                aircraft_type=device.model or 'UNKNOWN',
+                aircraft_registration=device.registration or 'UNKNOWN',
+                departure_airport='UNKNOWN',  # Could be enhanced with location data
+                arrival_airport='UNKNOWN',    # Could be enhanced with location data
+                flight_time=round(flight_duration_hours, 2),
+                pilot_in_command_time=round(flight_duration_hours, 2),
+                dual_time=0.0,
+                instrument_time=0.0,
+                night_time=0.0,
+                cross_country_time=0.0,
+                landings_day=len(landing_events),  # Total number of landings in sequence
+                landings_night=0,
+                remarks=f'Generated from device events - Takeoff: {takeoff_event.format_log_time()}, '
+                       f'Final Landing: {final_landing_event.format_log_time()}, '
+                       f'Total Landings: {len(landing_events)}',
+                pilot_name=None,  # Could be enhanced with pilot detection
+                user_id=device.user_id,  # Assign to device owner
+                device_id=device.id
+            )
+            
+            db.session.add(logbook_entry)
+            
+            # Link events to logbook entry (we need to flush to get the ID)
+            db.session.flush()
+            
+            # Update events with logbook entry reference if the model supports it
+            # For now, we'll add this information to the remarks of existing events
+            try:
+                # Update takeoff event
+                link_message = f"Linked to Logbook Entry {logbook_entry.id}"
+                if takeoff_event.message:
+                    # Clean up any existing duplicate link messages first
+                    cleaned_message = self._clean_duplicate_link_messages(takeoff_event.message)
+                    # Check if this specific link message is already present
+                    if link_message not in cleaned_message:
+                        takeoff_event.message = f"{cleaned_message} [{link_message}]"
+                    else:
+                        takeoff_event.message = cleaned_message
+                else:
+                    takeoff_event.message = link_message
+                
+                # Update landing events
+                for landing_event in landing_events:
+                    if landing_event.message:
+                        # Clean up any existing duplicate link messages first
+                        cleaned_message = self._clean_duplicate_link_messages(landing_event.message)
+                        # Check if this specific link message is already present
+                        if link_message not in cleaned_message:
+                            landing_event.message = f"{cleaned_message} [{link_message}]"
+                        else:
+                            landing_event.message = cleaned_message
+                    else:
+                        landing_event.message = link_message
+                
+            except Exception as e:
+                logger.warning(f"Could not link events to logbook entry: {str(e)}")
+            
+            logger.info(f"Created logbook entry from events: {flight_duration_hours:.2f}h flight "
+                       f"with {len(landing_events)} landings for device {device.name}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating logbook entry from events: {str(e)}")
+            logger.debug(f"Flight sequence data: {flight_sequence}")
+            raise
 
 
 # Create singleton instance

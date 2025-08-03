@@ -23,34 +23,34 @@ def calculate_logbook_totals(user_id):
         entry_totals = {
             'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'total_landings': (
                 db.session.query(
                     db.func.sum(LogbookEntry.landings_day + LogbookEntry.landings_night)
                 ).filter(
                     LogbookEntry.user_id == user_id,
-                    LogbookEntry.date >= initial_time.effective_date
+                    db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
                 ).scalar() or 0
             )
         }
@@ -68,7 +68,7 @@ def calculate_logbook_totals(user_id):
             'initial_time': initial_time,
             'entries_count': LogbookEntry.query.filter(
                 LogbookEntry.user_id == user_id,
-                LogbookEntry.date >= initial_time.effective_date
+                db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).count()
         }
     else:
@@ -108,7 +108,7 @@ def index():
     
     # Get recent logbook entries
     recent_entries = LogbookEntry.query.filter_by(user_id=current_user.id)\
-        .order_by(LogbookEntry.date.desc()).limit(5).all()
+        .order_by(LogbookEntry.takeoff_datetime.desc()).limit(5).all()
     
     # Calculate total flight time using new function
     totals = calculate_logbook_totals(current_user.id)
@@ -201,7 +201,7 @@ def device_logbook(device_id):
     
     # Get all logbook entries linked to this device
     entries = LogbookEntry.query.filter_by(device_id=device_id)\
-        .order_by(LogbookEntry.date.desc(), LogbookEntry.created_at.desc())\
+        .order_by(LogbookEntry.takeoff_datetime.desc(), LogbookEntry.created_at.desc())\
         .paginate(page=page, per_page=per_page, error_out=False)
     
     # Calculate totals for this device
@@ -336,7 +336,7 @@ def logbook():
     per_page = 20
     
     entries = LogbookEntry.query.filter_by(user_id=current_user.id)\
-        .order_by(LogbookEntry.date.desc())\
+        .order_by(LogbookEntry.takeoff_datetime.desc())\
         .paginate(page=page, per_page=per_page, error_out=False)
     
     # Calculate totals using new function
@@ -354,13 +354,20 @@ def add_logbook_entry():
     """Add new logbook entry."""
     form = LogbookEntryForm()
     if form.validate_on_submit():
+        # Calculate flight time if not provided
+        flight_time = form.flight_time.data
+        if not flight_time and form.takeoff_datetime.data and form.landing_datetime.data:
+            duration = form.landing_datetime.data - form.takeoff_datetime.data
+            flight_time = round(duration.total_seconds() / 3600, 2)
+        
         entry = LogbookEntry(
-            date=form.date.data,
+            takeoff_datetime=form.takeoff_datetime.data,
+            landing_datetime=form.landing_datetime.data,
             aircraft_type=form.aircraft_type.data,
             aircraft_registration=form.aircraft_registration.data,
             departure_airport=form.departure_airport.data,
             arrival_airport=form.arrival_airport.data,
-            flight_time=form.flight_time.data,
+            flight_time=flight_time or 0,
             pilot_in_command_time=form.pilot_in_command_time.data or 0,
             dual_time=form.dual_time.data or 0,
             instrument_time=form.instrument_time.data or 0,
@@ -404,7 +411,7 @@ def my_aircraft_access():
         mapping.recent_entries = LogbookEntry.query.filter_by(
             pilot_name=mapping.pilot_name,
             device_id=mapping.device_id
-        ).order_by(LogbookEntry.date.desc()).limit(5).all()
+        ).order_by(LogbookEntry.takeoff_datetime.desc()).limit(5).all()
     
     return render_template('dashboard/my_aircraft_access.html',
                          title='My Aircraft',
