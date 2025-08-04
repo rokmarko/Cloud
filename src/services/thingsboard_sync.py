@@ -1035,6 +1035,67 @@ class ThingsBoardSyncService:
         
         return sequences
     
+    def clear_all_events_and_reset_logger_pages(self) -> Dict[str, Any]:
+        """
+        Clear all events from the database and reset current_logger_page to 0 for all devices.
+        
+        Returns:
+            Dict with results of the clearing operation
+        """
+        result = {
+            'events_cleared': 0,
+            'devices_reset': 0,
+            'logbook_entries_removed': 0,
+            'errors': []
+        }
+        
+        try:
+            # Clear all events
+            events_count = Event.query.count()
+            Event.query.delete()
+            result['events_cleared'] = events_count
+            logger.info(f"Cleared {events_count} events from database")
+            
+            # Clear all event-generated logbook entries
+            event_entries = LogbookEntry.query.filter(
+                LogbookEntry.remarks.like('%Generated from device events%')
+            ).all()
+            
+            for entry in event_entries:
+                db.session.delete(entry)
+                result['logbook_entries_removed'] += 1
+            
+            logger.info(f"Cleared {result['logbook_entries_removed']} event-generated logbook entries")
+            
+            # Reset current_logger_page for all devices
+            devices = Device.query.all()
+            devices_updated = 0
+            
+            for device in devices:
+                if device.current_logger_page != 0:
+                    device.current_logger_page = 0
+                    device.updated_at = datetime.utcnow()
+                    devices_updated += 1
+            
+            result['devices_reset'] = devices_updated
+            logger.info(f"Reset current_logger_page to 0 for {devices_updated} devices")
+            
+            # Commit all changes
+            db.session.commit()
+            
+            logger.info(f"Successfully cleared all events and reset logger pages: "
+                       f"{result['events_cleared']} events, "
+                       f"{result['logbook_entries_removed']} logbook entries, "
+                       f"{result['devices_reset']} devices reset")
+            
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Error clearing events and resetting logger pages: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+        
+        return result
+
     def _clean_duplicate_link_messages(self, message: str) -> str:
         """
         Clean up duplicate link messages from an event message.

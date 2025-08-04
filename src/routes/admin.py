@@ -490,48 +490,38 @@ def clear_synced_entries():
 @login_required
 @admin_required
 def clear_events():
-    """Clear all device events."""
+    """Clear all device events and reset current_logger_page to 0 for all devices."""
     try:
-        # Find all events
-        all_events = Event.query.all()
-        count = len(all_events)
+        # Use the new comprehensive clear method
+        result = thingsboard_sync.clear_all_events_and_reset_logger_pages()
         
-        if count == 0:
-            flash('No events found to clear.', 'info')
-            return redirect(url_for('admin.sync_management'))
-        
-        # Get some statistics for logging
-        device_counts = {}
-        event_type_counts = {}
-        
-        for event in all_events:
-            device_name = event.device.name if event.device else f"Device ID {event.device_id}"
-            device_counts[device_name] = device_counts.get(device_name, 0) + 1
+        if result['errors']:
+            error_msg = '; '.join(result['errors'])
+            current_app.logger.error(f"Error clearing events and resetting logger pages: {error_msg}")
+            flash('Error clearing events and resetting logger pages. Please try again.', 'error')
+        else:
+            # Log the operation
+            current_app.logger.info(f"Admin {current_user.nickname} cleared {result['events_cleared']} device events, "
+                                  f"removed {result['logbook_entries_removed']} event-generated logbook entries, "
+                                  f"and reset current_logger_page for {result['devices_reset']} devices")
             
-            # Count active event types
-            active_events = event.get_active_events()
-            for event_type in active_events:
-                event_type_counts[event_type] = event_type_counts.get(event_type, 0) + 1
-        
-        # Delete all events
-        for event in all_events:
-            db.session.delete(event)
-        
-        db.session.commit()
-        
-        # Create detailed log message
-        devices_summary = ", ".join([f"{device}: {count} events" for device, count in device_counts.items()])
-        event_types_summary = ", ".join([f"{event_type}: {count}" for event_type, count in event_type_counts.items()])
-        
-        current_app.logger.info(f"Admin {current_user.nickname} cleared {count} device events "
-                              f"(Devices: {devices_summary}, Event types: {event_types_summary})")
-        
-        flash(f'Successfully cleared {count} device events from {len(device_counts)} devices.', 'success')
+            # Create user-friendly message
+            message_parts = []
+            if result['events_cleared'] > 0:
+                message_parts.append(f"{result['events_cleared']} events")
+            if result['logbook_entries_removed'] > 0:
+                message_parts.append(f"{result['logbook_entries_removed']} event-generated logbook entries")
+            if result['devices_reset'] > 0:
+                message_parts.append(f"logger pages reset for {result['devices_reset']} devices")
+            
+            if message_parts:
+                flash(f'Successfully cleared {", ".join(message_parts)}.', 'success')
+            else:
+                flash('No events or devices needed clearing.', 'info')
         
     except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error clearing events: {str(e)}")
-        flash('Error clearing events. Please try again.', 'error')
+        current_app.logger.error(f"Unexpected error clearing events and resetting logger pages: {str(e)}")
+        flash('Unexpected error occurred. Please try again.', 'error')
     
     return redirect(url_for('admin.sync_management'))
 
