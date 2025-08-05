@@ -37,6 +37,18 @@
     </div>
 
     <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.instrument_layouts') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: #FF5722;">dashboard</span>
+                <h2 class="stats-number">{{ instrument_layout_count }}</h2>
+                <p class="stats-label">Instrument Layouts</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-3 col-md-6">
         <a href="{{ url_for('dashboard.my_aircraft_access') }}" class="text-decoration-none">
             <div class="stats-card clickable-card">
                 <span class="material-icons mb-3" style="font-size: 3rem; color: #9C27B0;">flight</span>
@@ -45,10 +57,6 @@
             </div>
         </a>
     </div>
-</div>
-
-<div class="row g-4 mb-4">
-    <div class="col-xl-3 col-md-6">
         <a href="{{ url_for('dashboard.logbook') }}" class="text-decoration-none">
             <div class="stats-card clickable-card">
                 <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">book</span>

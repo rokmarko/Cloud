@@ -98,6 +98,26 @@ class ChecklistCreateForm(FlaskForm):
     submit = SubmitField('Create Checklist')
 
 
+class InstrumentLayoutForm(FlaskForm):
+    """Instrument layout form."""
+    title = StringField('Title', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description')
+    category = SelectField('Category', choices=[
+        ('primary', 'Primary Display'),
+        ('secondary', 'Secondary Display'),
+        ('backup', 'Backup Instruments'),
+        ('custom', 'Custom Layout'),
+        ('other', 'Other')
+    ], validators=[DataRequired()])
+    submit = SubmitField('Save Layout')
+
+
+class InstrumentLayoutCreateForm(FlaskForm):
+    """Simplified instrument layout creation form - only title required."""
+    title = StringField('Layout Title', validators=[DataRequired(), Length(max=200)])
+    submit = SubmitField('Create Layout')
+
+
 class LogbookEntryForm(FlaskForm):
     """Logbook entry form."""
     takeoff_datetime = DateTimeLocalField('Takeoff Date/Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')

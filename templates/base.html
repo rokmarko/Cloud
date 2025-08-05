@@ -460,6 +460,12 @@
                                 </a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.instrument_layouts') %}active{% endif %}" 
+                                   href="{{ url_for('dashboard.instrument_layouts') }}">
+                                    <span class="material-icons">dashboard</span> Instrument Layouts
+                                </a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.approach_charts') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.approach_charts') }}">
                                     <span class="material-icons">map</span> Approach Charts

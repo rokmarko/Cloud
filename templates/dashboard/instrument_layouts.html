@@ -5,29 +5,28 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 <div class="page-header">
-    <h1><span class="material-icons">checklist</span> Checklists</h1>
-    <a href="{{ url_for('dashboard.add_checklist') }}" class="btn btn-primary">
-        <span class="material-icons me-2">add_circle</span> Create Checklist
+    <h1><span class="material-icons">dashboard</span> Instrument Layouts</h1>
+    <a href="{{ url_for('dashboard.add_instrument_layout') }}" class="btn btn-primary">
+        <span class="material-icons me-2">add_circle</span> Create Layout
     </a>
 </div>
 
-<!-- Checklist Editor Modal -->
-<div class="modal fade" id="checklistEditorModal" tabindex="-1" aria-hidden="true">
+<!-- Instrument Layout Editor Modal -->
+<div class="modal fade" id="instrumentLayoutEditorModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
                     <span class="material-icons me-2">edit</span>
-                    Checklist Editor
+                    Instrument Layout Editor
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-0">
                 <!-- Iframe with deferred loading - no initial src attribute -->
-                    <!-- data-src="http://localhost:30000/" -->
                 <iframe 
-                    id="checklistEditor" 
-                    data-src="https://www.kanardia.eu/apps/checklist"
+                    id="instrumentLayoutEditor" 
+                    data-src="https://www.kanardia.eu/apps/Customizer"
                     width="100%" 
                     height="100%" 
                     style="border: none; min-height: 80vh; display: none;">
@@ -38,7 +37,7 @@
                         <div class="spinner-border text-primary mb-3" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
-                        <p class="text-muted">Loading Checklist Editor...</p>
+                        <p class="text-muted">Loading Instrument Layout Editor...</p>
                     </div>
                 </div>
             </div>
@@ -46,46 +45,46 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <span class="material-icons me-1">close</span> Close
                 </button>
-                <button type="button" class="btn btn-primary" onclick="saveChecklist()">
-                    <span class="material-icons me-1">save</span> Save Checklist
+                <button type="button" class="btn btn-primary" onclick="saveInstrumentLayout()">
+                    <span class="material-icons me-1">save</span> Save Layout
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-{% if checklists %}
+{% if layouts %}
     <div class="row g-4">
-        {% for checklist in checklists %}
+        {% for layout in layouts %}
         <div class="col-lg-4 col-md-6">
-            <div class="card checklist-card">
+            <div class="card layout-card">
                 <div class="card-body">
                     <h5 class="card-title">
-                        <span class="material-icons me-2" style="color: var(--kanardia-orange);">checklist</span>
-                        {{ checklist.title }}
+                        <span class="material-icons me-2" style="color: var(--kanardia-orange);">dashboard</span>
+                        {{ layout.title }}
                     </h5>
                     <h6 class="card-subtitle mb-3">
                         <span class="badge" style="background: var(--kanardia-red); color: white;">
-                            {{ checklist.category.title() }}
+                            {{ layout.category.title() }}
                         </span>
                     </h6>
                     
-                    {% if checklist.description %}
-                        <p class="card-text">{{ checklist.description[:100] }}{% if checklist.description|length > 100 %}...{% endif %}</p>
+                    {% if layout.description %}
+                        <p class="card-text">{{ layout.description[:100] }}{% if layout.description|length > 100 %}...{% endif %}</p>
                     {% endif %}
                     
                     <p class="card-text">
                         <small class="text-muted">
                             <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">schedule</span>
-                            Created {{ checklist.created_at.strftime('%m/%d/%Y') }}
+                            Created {{ layout.created_at.strftime('%m/%d/%Y') }}
                         </small>
                     </p>
                     
                     <div class="d-flex gap-2 align-items-center">
-                        <button class="btn btn-primary btn-sm" onclick="openChecklistEditor({{ checklist.id }}, '{{ checklist.title }}')">
+                        <button class="btn btn-primary btn-sm" onclick="openInstrumentLayoutEditor({{ layout.id }}, '{{ layout.title }}')">
                             <span class="material-icons me-1">edit</span> Edit
                         </button>
-                        <a href="{{ url_for('dashboard.export_checklist', checklist_id=checklist.id) }}" class="btn btn-outline-success btn-sm">
+                        <a href="{{ url_for('dashboard.export_instrument_layout', layout_id=layout.id) }}" class="btn btn-outline-success btn-sm">
                             <span class="material-icons me-1">download</span> Export
                         </a>
                         <div class="dropdown">
@@ -94,13 +93,13 @@
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li>
-                                    <a class="dropdown-item" href="#" onclick="duplicateChecklist({{ checklist.id }})">
+                                    <a class="dropdown-item" href="#" onclick="duplicateInstrumentLayout({{ layout.id }})">
                                         <span class="material-icons me-2">content_copy</span> Duplicate
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <a class="dropdown-item text-danger" href="#" onclick="deleteChecklist({{ checklist.id }})">
+                                    <a class="dropdown-item text-danger" href="#" onclick="deleteInstrumentLayout({{ layout.id }})">
                                         <span class="material-icons me-2">delete</span> Delete
                                     </a>
                                 </li>
@@ -114,26 +113,26 @@
     </div>
 {% else %}
     <div class="text-center mt-5">
-        <span class="material-icons mb-4" style="font-size: 6rem; color: #e0e0e0;">checklist</span>
-        <h3 class="text-muted mb-3">No checklists yet</h3>
-        <p class="text-muted mb-4">Create your first checklist to get started with the Kanardia editor.</p>
-        <a href="{{ url_for('dashboard.add_checklist') }}" class="btn btn-primary btn-lg">
-            <span class="material-icons me-2">add_circle</span> Create Your First Checklist
+        <span class="material-icons mb-4" style="font-size: 6rem; color: #e0e0e0;">dashboard</span>
+        <h3 class="text-muted mb-3">No instrument layouts yet</h3>
+        <p class="text-muted mb-4">Create your first instrument layout to get started with the Kanardia layout editor.</p>
+        <a href="{{ url_for('dashboard.add_instrument_layout') }}" class="btn btn-primary btn-lg">
+            <span class="material-icons me-2">add_circle</span> Create Your First Layout
         </a>
     </div>
 {% endif %}
 
 <script>
-let currentChecklistId = null;
+let currentLayoutId = null;
 let isEditorLoaded = false;
 let modalInstance = null;
 
 /**
- * Handle messages received from the checklist editor iframe
+ * Handle messages received from the instrument layout editor iframe
  * @param {MessageEvent} event - The message event from the iframe
  */
 function handleEditorMessage(event) {
-    console.log('Checklist editor message:', event.data);
+    console.log('Instrument layout editor message:', event.data);
 
     if (event.origin !== 'https://www.kanardia.eu') {
         return; // Ignore messages from other origins
@@ -146,10 +145,10 @@ function handleEditorMessage(event) {
                 isEditorLoaded = true;
                 hideLoadingIndicator();
                 // Call load method after init is received
-                loadChecklistData();
+                loadInstrumentLayoutData();
             }
             else if (payload.event === 'autosave') {
-                saveChecklistData(payload.xml);
+                saveInstrumentLayoutData(payload.xml);
             }
         } catch (error) {
             console.error('Error parsing editor message:', error);
@@ -158,17 +157,17 @@ function handleEditorMessage(event) {
 }
 
 /**
- * Open the checklist editor modal and load the iframe
- * @param {number} checklistId - The ID of the checklist to edit
- * @param {string} checklistTitle - The title of the checklist
+ * Open the instrument layout editor modal and load the iframe
+ * @param {number} layoutId - The ID of the layout to edit
+ * @param {string} layoutTitle - The title of the layout
  */
-function openChecklistEditor(checklistId, checklistTitle) {
-    currentChecklistId = checklistId;
+function openInstrumentLayoutEditor(layoutId, layoutTitle) {
+    currentLayoutId = layoutId;
     isEditorLoaded = false;
     
     // Update modal title
-    document.querySelector('#checklistEditorModal .modal-title').innerHTML = 
-        '<span class="material-icons me-2">edit</span>Edit: ' + checklistTitle;
+    document.querySelector('#instrumentLayoutEditorModal .modal-title').innerHTML = 
+        '<span class="material-icons me-2">edit</span>Edit: ' + layoutTitle;
     
     // Show loading indicator
     showLoadingIndicator();
@@ -177,16 +176,16 @@ function openChecklistEditor(checklistId, checklistTitle) {
     window.addEventListener('message', handleEditorMessage);
 
     // Load the iframe source (deferred loading)
-    const iframe = document.getElementById('checklistEditor');
+    const iframe = document.getElementById('instrumentLayoutEditor');
     const editorUrl = iframe.getAttribute('data-src');
     iframe.src = editorUrl;
 
     // Show the modal
-    modalInstance = new bootstrap.Modal(document.getElementById('checklistEditorModal'));
+    modalInstance = new bootstrap.Modal(document.getElementById('instrumentLayoutEditorModal'));
     modalInstance.show();
    
     // Handle modal close event to cleanup
-    const modalElement = document.getElementById('checklistEditorModal');
+    const modalElement = document.getElementById('instrumentLayoutEditorModal');
     modalElement.addEventListener('hidden.bs.modal', function onModalHidden() {
         cleanupEditor();
         modalElement.removeEventListener('hidden.bs.modal', onModalHidden);
@@ -198,7 +197,7 @@ function openChecklistEditor(checklistId, checklistTitle) {
  */
 function showLoadingIndicator() {
     const loadingElement = document.getElementById('editorLoading');
-    const iframe = document.getElementById('checklistEditor');
+    const iframe = document.getElementById('instrumentLayoutEditor');
     
     if (loadingElement) loadingElement.style.display = 'flex';
     if (iframe) iframe.style.display = 'none';
@@ -209,7 +208,7 @@ function showLoadingIndicator() {
  */
 function hideLoadingIndicator() {
     const loadingElement = document.getElementById('editorLoading');
-    const iframe = document.getElementById('checklistEditor');
+    const iframe = document.getElementById('instrumentLayoutEditor');
     
     if (loadingElement) loadingElement.style.display = 'none';
     if (iframe) iframe.style.display = 'block';
@@ -223,13 +222,13 @@ function cleanupEditor() {
     window.removeEventListener('message', handleEditorMessage);
     
     // Clear iframe source to stop loading
-    const iframe = document.getElementById('checklistEditor');
+    const iframe = document.getElementById('instrumentLayoutEditor');
     if (iframe) {
         iframe.src = 'about:blank';
     }
     
     // Reset state
-    currentChecklistId = null;
+    currentLayoutId = null;
     isEditorLoaded = false;
     modalInstance = null;
     
@@ -238,44 +237,44 @@ function cleanupEditor() {
 }
 
 /**
- * Load checklist data from the backend and send to iframe
+ * Load instrument layout data from the backend and send to iframe
  */
-function loadChecklistData() {
-    if (!currentChecklistId || !isEditorLoaded) return;
+function loadInstrumentLayoutData() {
+    if (!currentLayoutId || !isEditorLoaded) return;
     
     // Get the iframe
-    const iframe = document.getElementById('checklistEditor');
+    const iframe = document.getElementById('instrumentLayoutEditor');
     
-    // Fetch checklist data from your backend
-    fetch(`/dashboard/api/checklist/${currentChecklistId}/load_json`)
+    // Fetch layout data from your backend
+    fetch(`/dashboard/api/instrument-layout/${currentLayoutId}/load_json`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return response.json();
         })
-        .then(reply => {
+        .then(data => {
             // Send data to the iframe
             iframe.contentWindow.postMessage(JSON.stringify({
-                action: 'load', xml: reply.data, title: reply.title
+                action: 'load', xml: JSON.stringify(data), title: "Test"
             }), 'https://www.kanardia.eu');
         })
         .catch(error => {
-            console.error('Error loading checklist:', error);
-            alert('Error loading checklist data. Please try again.');
+            console.error('Error loading instrument layout:', error);
+            alert('Error loading instrument layout data. Please try again.');
         });
 }
 
 /**
- * Save the current checklist data
+ * Save the current instrument layout data
  */
-function saveChecklist() {
-    if (!currentChecklistId || !isEditorLoaded) {
+function saveInstrumentLayout() {
+    if (!currentLayoutId || !isEditorLoaded) {
         alert('Editor not ready. Please wait for the editor to load.');
         return;
     }
     
-    const iframe = document.getElementById('checklistEditor');
+    const iframe = document.getElementById('instrumentLayoutEditor');
     
     // Request data from the iframe
     iframe.contentWindow.postMessage({
@@ -291,7 +290,7 @@ function saveChecklist() {
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             
             // Save to your backend
-            fetch(`/api/checklist/${currentChecklistId}`, {
+            fetch(`/dashboard/api/instrument-layout/${currentLayoutId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -313,8 +312,8 @@ function saveChecklist() {
                 location.reload();
             })
             .catch(error => {
-                console.error('Error saving checklist:', error);
-                alert('Error saving checklist. Please try again.');
+                console.error('Error saving instrument layout:', error);
+                alert('Error saving instrument layout. Please try again.');
             });
             
             // Remove the event listener
@@ -326,12 +325,12 @@ function saveChecklist() {
 }
 
 /**
- * Save checklist data directly (for autosave functionality)
- * @param {Object} data - The checklist data to save
+ * Save instrument layout data directly (for autosave functionality)
+ * @param {Object} data - The layout data to save
  */
-function saveChecklistData(data) {
-    if (!currentChecklistId) {
-        console.error('No checklist ID available for saving');
+function saveInstrumentLayoutData(data) {
+    if (!currentLayoutId) {
+        console.error('No layout ID available for saving');
         return;
     }
     
@@ -339,7 +338,7 @@ function saveChecklistData(data) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
     
     // Save to backend API
-    fetch(`/dashboard/api/checklist/${currentChecklistId}`, {
+    fetch(`/dashboard/api/instrument-layout/${currentLayoutId}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -356,27 +355,23 @@ function saveChecklistData(data) {
         return response.json();
     })
     .then(result => {
-        console.log('Checklist autosaved successfully:', result);
-        // Optional: Show a subtle notification that data was saved
-        // You could add a small "Saved" indicator here
+        console.log('Instrument layout autosaved successfully:', result);
     })
     .catch(error => {
-        console.error('Error autosaving checklist:', error);
-        // Don't show alert for autosave failures as they can be disruptive
-        // Instead, log the error for debugging
+        console.error('Error autosaving instrument layout:', error);
     });
 }
 
 /**
- * Duplicate a checklist
- * @param {number} checklistId - The ID of the checklist to duplicate
+ * Duplicate an instrument layout
+ * @param {number} layoutId - The ID of the layout to duplicate
  */
-function duplicateChecklist(checklistId) {
-    if (confirm('Are you sure you want to duplicate this checklist?')) {
+function duplicateInstrumentLayout(layoutId) {
+    if (confirm('Are you sure you want to duplicate this instrument layout?')) {
         // Get CSRF token from meta tag
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         
-        fetch(`/api/checklist/${checklistId}/duplicate`, {
+        fetch(`/dashboard/api/instrument-layout/${layoutId}/duplicate`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': csrfToken,
@@ -393,22 +388,22 @@ function duplicateChecklist(checklistId) {
             location.reload();
         })
         .catch(error => {
-            console.error('Error duplicating checklist:', error);
-            alert('Error duplicating checklist. Please try again.');
+            console.error('Error duplicating instrument layout:', error);
+            alert('Error duplicating instrument layout. Please try again.');
         });
     }
 }
 
 /**
- * Delete a checklist
- * @param {number} checklistId - The ID of the checklist to delete
+ * Delete an instrument layout
+ * @param {number} layoutId - The ID of the layout to delete
  */
-function deleteChecklist(checklistId) {
-    if (confirm('Are you sure you want to delete this checklist? This action cannot be undone.')) {
+function deleteInstrumentLayout(layoutId) {
+    if (confirm('Are you sure you want to delete this instrument layout? This action cannot be undone.')) {
         // Get CSRF token from meta tag
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         
-        fetch(`/api/checklist/${checklistId}`, {
+        fetch(`/dashboard/api/instrument-layout/${layoutId}`, {
             method: 'DELETE',
             headers: {
                 'X-CSRFToken': csrfToken,
@@ -425,21 +420,21 @@ function deleteChecklist(checklistId) {
             location.reload();
         })
         .catch(error => {
-            console.error('Error deleting checklist:', error);
-            alert('Error deleting checklist. Please try again.');
+            console.error('Error deleting instrument layout:', error);
+            alert('Error deleting instrument layout. Please try again.');
         });
     }
 }
 </script>
 
 <style>
-.checklist-card {
+.layout-card {
     transition: all 0.3s ease;
     border: none;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.checklist-card:hover {
+.layout-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 25px rgba(0,0,0,0.15);
 }
@@ -465,7 +460,7 @@ function deleteChecklist(checklistId) {
     padding: 0;
 }
 
-#checklistEditor {
+#instrumentLayoutEditor {
     width: 100%;
     height: calc(100vh - 200px);
     border: none;

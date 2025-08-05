@@ -25,6 +25,7 @@ class User(UserMixin, db.Model):
     # Relationships
     devices = db.relationship('Device', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
     checklists = db.relationship('Checklist', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
+    instrument_layouts = db.relationship('InstrumentLayout', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
     logbook_entries = db.relationship('LogbookEntry', backref='pilot', lazy='dynamic', cascade='all, delete-orphan')
     initial_logbook_time = db.relationship('InitialLogbookTime', backref='pilot', uselist=False, cascade='all, delete-orphan')
     
@@ -155,6 +156,26 @@ class ApproachChart(db.Model):
     
     def __repr__(self):
         return f'<ApproachChart {self.airport_code} {self.chart_type}>'
+
+
+class InstrumentLayout(db.Model):
+    """Instrument layout model for cockpit instrument configurations."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    category = db.Column(db.String(50), nullable=False)  # primary, secondary, backup, custom
+    layout_data = db.Column(db.Text, nullable=False)  # JSON string of layout configuration
+    json_content = db.Column(db.Text, nullable=False)  # Full JSON content of the layout
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Foreign keys
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    def __repr__(self):
+        return f'<InstrumentLayout {self.title}>'
 
 
 class LogbookEntry(db.Model):

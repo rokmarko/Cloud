@@ -5,8 +5,8 @@ Dashboard and application feature routes
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from src.app import db
-from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
-from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, LogbookEntryForm, InitialLogbookTimeForm
+from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
+from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, LogbookEntryForm, InitialLogbookTimeForm
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -100,6 +100,7 @@ def index():
     # Get some statistics for the dashboard
     device_count = Device.query.filter_by(user_id=current_user.id, is_active=True).count()
     checklist_count = Checklist.query.filter_by(user_id=current_user.id, is_active=True).count()
+    instrument_layout_count = InstrumentLayout.query.filter_by(user_id=current_user.id, is_active=True).count()
     logbook_count = LogbookEntry.query.filter_by(user_id=current_user.id).count()
     
     # Get pilot mapping count (aircraft the user has access to)
@@ -118,6 +119,7 @@ def index():
                          title='Dashboard',
                          device_count=device_count,
                          checklist_count=checklist_count,
+                         instrument_layout_count=instrument_layout_count,
                          logbook_count=logbook_count,
                          pilot_mapping_count=pilot_mapping_count,
                          recent_entries=recent_entries,
@@ -402,7 +404,6 @@ def export_checklist(checklist_id):
     
     return response
 
-@dashboard_bp.route('/checklists/<int:checklist_id>/load_json')
 @dashboard_bp.route('/api/checklist/<int:checklist_id>/load_json')
 @login_required
 def load_checklist(checklist_id):
@@ -410,17 +411,139 @@ def load_checklist(checklist_id):
     checklist = Checklist.query.filter_by(id=checklist_id, user_id=current_user.id).first_or_404()
     
     # Parse the JSON content from the database and return as object
+    # try:
+    #     json_data = json.loads(checklist.json_content) if checklist.json_content else {}
+    # except (json.JSONDecodeError, TypeError):
+    #     # If parsing fails, return empty default structure
+    #     json_data = {
+    #         "Language": "en-us",
+    #         "Voice": "Linda",
+    #         "Root": {
+    #             "Type": 0,
+    #             "Name": "Root",
+    #             "Children": []
+    #         }
+    #     }
+
+    reply = { 
+        "data": checklist.json_content,
+        "title": checklist.title
+    }
+
+    return reply
+
+
+@dashboard_bp.route('/instrument-layouts')
+@login_required
+def instrument_layouts():
+    """Instrument layout management page."""
+    layouts = InstrumentLayout.query.filter_by(user_id=current_user.id, is_active=True).all()
+    return render_template('dashboard/instrument_layouts.html', title='Instrument Layouts', layouts=layouts)
+
+
+@dashboard_bp.route('/instrument-layouts/add', methods=['GET', 'POST'])
+@login_required
+def add_instrument_layout():
+    """Add new instrument layout."""
+    form = InstrumentLayoutCreateForm()
+    if form.validate_on_submit():
+        # Default instrument layout template
+        default_template = {
+            "layout_type": "instrument_panel",
+            "version": "1.0",
+            "instruments": [],
+            "layout": {
+                "width": 1024,
+                "height": 768,
+                "background_color": "#000000",
+                "grid_enabled": True,
+                "grid_size": 10
+            },
+            "settings": {
+                "units": "metric",
+                "theme": "dark"
+            }
+        }
+        
+        layout = InstrumentLayout(
+            title=form.title.data,
+            description="",
+            category="primary",
+            layout_data=json.dumps([]),  # Empty data for now
+            json_content=json.dumps(default_template),
+            user_id=current_user.id
+        )
+        db.session.add(layout)
+        db.session.commit()
+        flash('Instrument layout created successfully!', 'success')
+        return redirect(url_for('dashboard.instrument_layouts'))
+    
+    return render_template('dashboard/add_instrument_layout_simple.html', title='Add Instrument Layout', form=form)
+
+
+@dashboard_bp.route('/instrument-layouts/<int:layout_id>')
+@login_required
+def view_instrument_layout(layout_id):
+    """View instrument layout details."""
+    layout = InstrumentLayout.query.filter_by(id=layout_id, user_id=current_user.id).first_or_404()
+    return render_template('dashboard/view_instrument_layout.html', 
+                         title=layout.title, 
+                         layout=layout)
+
+
+@dashboard_bp.route('/instrument-layouts/<int:layout_id>/export')
+@login_required
+def export_instrument_layout(layout_id):
+    """Export instrument layout json_content as downloadable file."""
+    from flask import Response
+    import re
+    
+    layout = InstrumentLayout.query.filter_by(id=layout_id, user_id=current_user.id).first_or_404()
+    
+    # Clean the filename - remove special characters and spaces
+    safe_filename = re.sub(r'[^\w\s-]', '', layout.title)
+    safe_filename = re.sub(r'[-\s]+', '_', safe_filename)
+    filename = f"instrument_layout_{safe_filename}.json"
+    
+    # Create response with JSON content
+    response = Response(
+        layout.json_content,
+        mimetype='application/json',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+    )
+    
+    return response
+
+
+@dashboard_bp.route('/instrument-layouts/<int:layout_id>/load_json')
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>/load_json')
+@login_required
+def load_instrument_layout(layout_id):
+    """Load instrument layout json_content for editing."""
+    layout = InstrumentLayout.query.filter_by(id=layout_id, user_id=current_user.id).first_or_404()
+    
+    # Parse the JSON content from the database and return as object
     try:
-        json_data = json.loads(checklist.json_content) if checklist.json_content else {}
+        json_data = json.loads(layout.json_content) if layout.json_content else {}
     except (json.JSONDecodeError, TypeError):
         # If parsing fails, return empty default structure
         json_data = {
-            "Language": "en-us",
-            "Voice": "Linda",
-            "Root": {
-                "Type": 0,
-                "Name": "Root",
-                "Children": []
+            "layout_type": "instrument_panel",
+            "version": "1.0",
+            "instruments": [],
+            "layout": {
+                "width": 1024,
+                "height": 768,
+                "background_color": "#000000",
+                "grid_enabled": True,
+                "grid_size": 10
+            },
+            "settings": {
+                "units": "metric",
+                "theme": "dark"
             }
         }
     
@@ -712,6 +835,119 @@ def api_delete_checklist(checklist_id):
     return jsonify({
         'success': True,
         'message': 'Checklist deleted successfully'
+    })
+
+
+# API Endpoints for Instrument Layout Editor Integration
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>', methods=['GET'])
+@login_required
+def api_get_instrument_layout(layout_id):
+    """Get instrument layout data for the editor."""
+    layout = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    # Parse layout data if it's stored as JSON
+    try:
+        data = json.loads(layout.layout_data) if layout.layout_data else {}
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    
+    return jsonify({
+        'id': layout.id,
+        'title': layout.title,
+        'category': layout.category,
+        'description': layout.description,
+        'data': data
+    })
+
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>', methods=['PUT'])
+@login_required
+def api_update_instrument_layout(layout_id):
+    """Update instrument layout data from the editor."""
+    layout = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    request_data = request.get_json()
+    
+    # Update layout fields
+    if 'title' in request_data:
+        layout.title = request_data['title']
+    if 'description' in request_data:
+        layout.description = request_data['description']
+    if 'category' in request_data:
+        layout.category = request_data['category']
+    if 'data' in request_data:
+        layout.layout_data = json.dumps(request_data['data'])
+    # Handle json_content updates (for instrument layout editor)
+    if 'json_content' in request_data:
+        layout.json_content = json.dumps(request_data['json_content'])
+    # If data is provided without explicit json_content, also update json_content
+    elif 'data' in request_data:
+        layout.json_content = json.dumps(request_data['data'])
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Instrument layout updated successfully'
+    })
+
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>/duplicate', methods=['POST'])
+@login_required
+def api_duplicate_instrument_layout(layout_id):
+    """Duplicate an instrument layout."""
+    original = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    # Create a copy
+    duplicate = InstrumentLayout(
+        title=f"{original.title} (Copy)",
+        category=original.category,
+        description=original.description,
+        layout_data=original.layout_data,
+        json_content=original.json_content,
+        user_id=current_user.id
+    )
+    
+    db.session.add(duplicate)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Instrument layout duplicated successfully',
+        'new_id': duplicate.id
+    })
+
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>', methods=['DELETE'])
+@login_required
+def api_delete_instrument_layout(layout_id):
+    """Delete an instrument layout (soft delete)."""
+    layout = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    # Soft delete by setting is_active to False
+    layout.is_active = False
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Instrument layout deleted successfully'
     })
 
 
