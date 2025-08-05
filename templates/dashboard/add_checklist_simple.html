@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons me-2">add_circle</span> Create Checklist</h1>
+    <a href="{{ url_for('dashboard.checklists') }}" class="btn btn-outline-secondary">
+        <span class="material-icons me-2">arrow_back</span> Back to Checklists
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <span class="material-icons me-2" style="vertical-align: middle;">checklist</span>
+                    New Checklist
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">Create a new checklist with a default template structure. You can customize the content later.</p>
+                
+                <form method="POST">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-4">
+                        {{ form.title.label(class="form-label") }}
+                        {{ form.title(class="form-control form-control-lg" + (" is-invalid" if form.title.errors else ""), placeholder="Enter checklist title...") }}
+                        {% if form.title.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.title.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">Give your checklist a descriptive name (e.g., "Pre-flight Inspection", "Emergency Procedures")</div>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        {{ form.submit(class="btn btn-primary btn-lg") }}
+                        <a href="{{ url_for('dashboard.checklists') }}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <span class="material-icons me-2" style="vertical-align: middle;">info</span>
+                    What's included?
+                </h6>
+                <p class="card-text text-muted mb-0">
+                    Your new checklist will be created with a default template containing sections for:
+                    <strong>Pre-flight</strong>, <strong>In-flight</strong>, <strong>Post-flight</strong>, 
+                    <strong>Emergency</strong>, and <strong>Reference</strong> procedures.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+</style>
+{% endblock %}

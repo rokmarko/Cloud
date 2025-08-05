@@ -15,7 +15,7 @@
     <div class="card">
         <div class="card-header">
             <h5 class="mb-0">All Devices ({{ devices.total }} total)</h5>
-            <small class="text-muted">
+            <small class="">
                 Showing both active and unlinked devices. 
                 <span class="badge bg-success">Active</span> devices are linked to users. 
                 <span class="badge bg-danger">Unlinked</span> devices are soft-deleted.
@@ -99,6 +99,18 @@
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end">
                                         {% if device.is_active %}
+                                            <li>
+                                                <a class="dropdown-item" href="#" onclick="openReassignModal({{ device.id }}, '{{ device.name }}', '{{ device.owner.nickname }}', {{ device.owner.id }})">
+                                                    <span class="material-icons me-2">person_add</span> Reassign to User
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item text-warning" href="#" onclick="forceRebuildLogbook({{ device.id }}, '{{ device.name }}')">
+                                                    <span class="material-icons me-2">refresh</span> Force Rebuild Logbook
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
                                             <li>
                                                 <form method="POST" action="{{ url_for('admin.unlink_device', device_id=device.id) }}" class="m-0">
                                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -189,7 +201,180 @@
     </div>
 {% endif %}
 
+<!-- Reassign Device Modal -->
+<div class="modal fade" id="reassignDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">person_add</span>
+                    Reassign Device
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="reassignForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" id="deviceId" name="device_id" value=""/>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">devices</span>
+                            Device
+                        </label>
+                        <p class="form-control-plaintext bg-light p-2 rounded" id="deviceInfo">
+                            <strong id="deviceName"></strong>
+                        </p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">person</span>
+                            Current Owner
+                        </label>
+                        <p class="form-control-plaintext bg-light p-2 rounded" id="currentOwner"></p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="newUserId" class="form-label">
+                            <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">person_add</span>
+                            New Owner *
+                        </label>
+                        <select class="form-select" id="newUserId" name="new_user_id" required>
+                            <option value="">Select a user...</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.nickname }} ({{ user.email }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            <span class="material-icons me-1" style="font-size: 0.875rem; vertical-align: middle;">info</span>
+                            This will also clear any existing pilot mappings for this device.
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span class="material-icons me-1">close</span> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="submitReassignment()">
+                    <span class="material-icons me-1">person_add</span> Reassign Device
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+/**
+ * Open the reassign device modal
+ * @param {number} deviceId - The ID of the device to reassign
+ * @param {string} deviceName - The name of the device
+ * @param {string} currentOwner - The current owner nickname
+ * @param {number} currentOwnerId - The current owner ID
+ */
+function openReassignModal(deviceId, deviceName, currentOwner, currentOwnerId) {
+    // Set form values
+    document.getElementById('deviceId').value = deviceId;
+    document.getElementById('deviceName').textContent = deviceName;
+    document.getElementById('currentOwner').textContent = currentOwner;
+    
+    // Set form action
+    document.getElementById('reassignForm').action = `/admin/devices/${deviceId}/reassign`;
+    
+    // Reset and populate user selection (exclude current owner)
+    const userSelect = document.getElementById('newUserId');
+    const options = userSelect.querySelectorAll('option');
+    options.forEach(option => {
+        if (option.value == currentOwnerId) {
+            option.disabled = true;
+            option.style.display = 'none';
+        } else {
+            option.disabled = false;
+            option.style.display = 'block';
+        }
+    });
+    userSelect.value = '';
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('reassignDeviceModal'));
+    modal.show();
+}
+
+/**
+ * Submit the device reassignment
+ */
+function submitReassignment() {
+    const form = document.getElementById('reassignForm');
+    const formData = new FormData(form);
+    const deviceId = formData.get('device_id');
+    const newUserId = formData.get('new_user_id');
+    
+    if (!newUserId) {
+        showAlert('error', 'Please select a user to reassign the device to.');
+        return;
+    }
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Show loading state
+    const submitBtn = document.querySelector('#reassignDeviceModal .btn-primary');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Reassigning...';
+    submitBtn.disabled = true;
+    
+    fetch(`/admin/api/devices/${deviceId}/reassign`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            new_user_id: parseInt(newUserId)
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('reassignDeviceModal'));
+        modal.hide();
+        
+        // Show success message
+        showAlert('success', data.message);
+        
+        // Update the table row
+        updateDeviceRow(deviceId, data.new_owner);
+    })
+    .catch(error => {
+        console.error('Error reassigning device:', error);
+        showAlert('error', 'Error reassigning device. Please try again.');
+    })
+    .finally(() => {
+        // Reset button state
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+}
+
+/**
+ * Update device row after reassignment
+ * @param {number} deviceId - The device ID
+ * @param {string} newOwnerName - The new owner's name
+ */
+function updateDeviceRow(deviceId, newOwnerName) {
+    // For simplicity, just reload the page to reflect changes
+    // In a more sophisticated implementation, we could update the DOM directly
+    setTimeout(() => {
+        location.reload();
+    }, 1500);
+}
+
 /**
  * Unlink a device via API
  * @param {number} deviceId - The ID of the device to unlink
@@ -236,6 +421,42 @@ function unlinkDeviceAPI(deviceId, deviceName, ownerNickname) {
 }
 
 /**
+ * Force rebuild logbook for a device
+ * @param {number} deviceId - The ID of the device
+ * @param {string} deviceName - The name of the device
+ */
+function forceRebuildLogbook(deviceId, deviceName) {
+    if (confirm(`⚠️ FORCE REBUILD LOGBOOK ⚠️\n\nAre you sure you want to FORCE REBUILD the complete logbook for "${deviceName}"?\n\nThis action will:\n• Clear all event messages for this device\n• Remove all existing event-generated logbook entries\n• Recreate logbook entries from all events\n• This process cannot be undone\n\nContinue with force rebuild?`)) {
+        // Get CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        // Show loading indicator
+        showAlert('info', 'Force rebuilding logbook... This may take a few moments.');
+        
+        fetch(`/admin/devices/${deviceId}/force-rebuild-logbook`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `csrf_token=${csrfToken}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', data.message);
+            } else {
+                showAlert('error', data.message || 'Error during force rebuild. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error during force rebuild:', error);
+            showAlert('error', 'Error during force rebuild. Please try again.');
+        });
+    }
+}
+
+/**
  * Permanently delete a device
  * @param {number} deviceId - The ID of the device to delete
  * @param {string} deviceName - The name of the device
@@ -275,12 +496,27 @@ function deleteDevicePermanently(deviceId, deviceName) {
 
 /**
  * Show alert message
- * @param {string} type - Alert type (success, error)
+ * @param {string} type - Alert type (success, error, info)
  * @param {string} message - Alert message
  */
 function showAlert(type, message) {
-    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-    const alertIcon = type === 'success' ? 'check_circle' : 'error';
+    let alertClass, alertIcon;
+    
+    switch(type) {
+        case 'success':
+            alertClass = 'alert-success';
+            alertIcon = 'check_circle';
+            break;
+        case 'info':
+            alertClass = 'alert-info';
+            alertIcon = 'info';
+            break;
+        case 'error':
+        default:
+            alertClass = 'alert-danger';
+            alertIcon = 'error';
+            break;
+    }
     
     const alertHtml = `
         <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
@@ -290,11 +526,16 @@ function showAlert(type, message) {
         </div>
     `;
     
+    // Remove any existing alerts first
+    const existingAlerts = document.querySelectorAll('.alert');
+    existingAlerts.forEach(alert => alert.remove());
+    
     // Insert alert at the top of the page
     const pageHeader = document.querySelector('.page-header');
     pageHeader.insertAdjacentHTML('afterend', alertHtml);
     
-    // Auto-remove after 5 seconds
+    // Auto-remove after 5 seconds (except for info messages which stay longer)
+    const timeout = type === 'info' ? 10000 : 5000;
     setTimeout(() => {
         const alert = document.querySelector('.alert');
         if (alert) {

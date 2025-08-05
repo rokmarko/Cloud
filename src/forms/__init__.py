@@ -92,6 +92,12 @@ class ChecklistForm(FlaskForm):
     submit = SubmitField('Save Checklist')
 
 
+class ChecklistCreateForm(FlaskForm):
+    """Simplified checklist creation form - only title required."""
+    title = StringField('Checklist Title', validators=[DataRequired(), Length(max=200)])
+    submit = SubmitField('Create Checklist')
+
+
 class LogbookEntryForm(FlaskForm):
     """Logbook entry form."""
     takeoff_datetime = DateTimeLocalField('Takeoff Date/Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')

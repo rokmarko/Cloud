@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from src.app import db
 from src.models import Device, Checklist, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
-from src.forms import DeviceForm, ChecklistForm, LogbookEntryForm, InitialLogbookTimeForm
+from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, LogbookEntryForm, InitialLogbookTimeForm
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -193,18 +193,37 @@ def delete_device(device_id):
 @dashboard_bp.route('/devices/<int:device_id>/logbook')
 @login_required
 def device_logbook(device_id):
-    """View all logbook entries linked to a specific device (for device owner)."""
-    device = Device.query.filter_by(id=device_id, user_id=current_user.id, is_active=True).first_or_404()
+    """View all logbook entries linked to a specific device (for device owner and pilots)."""
+    # First check if user owns the device
+    device = Device.query.filter_by(id=device_id, user_id=current_user.id, is_active=True).first()
+    
+    # If not the owner, check if user is mapped as a pilot for this device
+    if not device:
+        from src.models import Pilot
+        pilot_mapping = Pilot.query.filter_by(
+            user_id=current_user.id, 
+            device_id=device_id, 
+            is_active=True
+        ).first()
+        
+        if pilot_mapping:
+            device = Device.query.filter_by(id=device_id, is_active=True).first()
+        
+        if not device:
+            # User has no access to this device
+            flash('You do not have access to view this device logbook.', 'error')
+            return redirect(url_for('dashboard.devices'))
     
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
-    # Get all logbook entries linked to this device
+    # Get ALL logbook entries linked to this device (regardless of user_id)
+    # This includes entries from device events (user_id=None) and pilot mappings
     entries = LogbookEntry.query.filter_by(device_id=device_id)\
         .order_by(LogbookEntry.takeoff_datetime.desc(), LogbookEntry.created_at.desc())\
         .paginate(page=page, per_page=per_page, error_out=False)
     
-    # Calculate totals for this device
+    # Calculate totals for this device from ALL entries
     device_entries = LogbookEntry.query.filter_by(device_id=device_id).all()
     total_flight_time = sum(entry.flight_time or 0 for entry in device_entries)
     total_entries = len(device_entries)
@@ -216,6 +235,8 @@ def device_logbook(device_id):
             unique_pilots.add(entry.pilot_name)
         elif entry.user:
             unique_pilots.add(entry.user.full_name)
+        else:
+            unique_pilots.add('Unknown Pilot')  # For event-generated entries without pilot info
     
     return render_template('dashboard/device_logbook.html',
                          title=f'Logbook - {device.name}',
@@ -288,24 +309,59 @@ def checklists():
 @login_required
 def add_checklist():
     """Add new checklist."""
-    form = ChecklistForm()
+    form = ChecklistCreateForm()
     if form.validate_on_submit():
-        # Convert items to JSON format
-        items = [item.strip() for item in form.items.data.split('\n') if item.strip()]
+        # Default checklist template
+        default_template = {
+            "Language": "en-us",
+            "Voice": "Linda",
+            "Root": {
+                "Type": 0,
+                "Name": "Root",
+                "Children": [
+                    {
+                        "Type": 0,
+                        "Name": "Pre-flight",
+                        "Children": []
+                    },
+                    {
+                        "Type": 0,
+                        "Name": "In-flight",
+                        "Children": []
+                    },
+                    {
+                        "Type": 0,
+                        "Name": "Post-flight",
+                        "Children": []
+                    },
+                    {
+                        "Type": 0,
+                        "Name": "Emergency",
+                        "Children": []
+                    },
+                    {
+                        "Type": 0,
+                        "Name": "Reference",
+                        "Children": []
+                    }
+                ]
+            }
+        }
         
         checklist = Checklist(
             title=form.title.data,
-            description=form.description.data,
-            category=form.category.data,
-            items=json.dumps(items),
+            description="",
+            category="other",
+            items=json.dumps([]),  # Empty items for now
+            json_content=json.dumps(default_template),
             user_id=current_user.id
         )
         db.session.add(checklist)
         db.session.commit()
-        flash('Checklist added successfully!', 'success')
+        flash('Checklist created successfully!', 'success')
         return redirect(url_for('dashboard.checklists'))
     
-    return render_template('dashboard/add_checklist.html', title='Add Checklist', form=form)
+    return render_template('dashboard/add_checklist_simple.html', title='Add Checklist', form=form)
 
 
 @dashboard_bp.route('/checklists/<int:checklist_id>')
@@ -318,6 +374,57 @@ def view_checklist(checklist_id):
                          title=checklist.title, 
                          checklist=checklist, 
                          items=items)
+
+
+@dashboard_bp.route('/checklists/<int:checklist_id>/export')
+@login_required
+def export_checklist(checklist_id):
+    """Export checklist json_content as downloadable file."""
+    from flask import Response
+    import re
+  
+    checklist = Checklist.query.filter_by(id=checklist_id, user_id=current_user.id).first_or_404()
+    
+    # Clean the filename - remove special characters and spaces
+    safe_filename = re.sub(r'[^\w\s-]', '', checklist.title)
+    safe_filename = re.sub(r'[-\s]+', '_', safe_filename)
+    filename = f"checklist_{safe_filename}.ckl"
+    
+    # Create response with JSON content
+    response = Response(
+        checklist.json_content,
+        mimetype='application/json',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+    )
+    
+    return response
+
+@dashboard_bp.route('/checklists/<int:checklist_id>/load_json')
+@dashboard_bp.route('/api/checklist/<int:checklist_id>/load_json')
+@login_required
+def load_checklist(checklist_id):
+    """Load checklist json_content for editing."""
+    checklist = Checklist.query.filter_by(id=checklist_id, user_id=current_user.id).first_or_404()
+    
+    # Parse the JSON content from the database and return as object
+    try:
+        json_data = json.loads(checklist.json_content) if checklist.json_content else {}
+    except (json.JSONDecodeError, TypeError):
+        # If parsing fails, return empty default structure
+        json_data = {
+            "Language": "en-us",
+            "Voice": "Linda",
+            "Root": {
+                "Type": 0,
+                "Name": "Root",
+                "Children": []
+            }
+        }
+    
+    return jsonify(json_data)
 
 
 @dashboard_bp.route('/approach-charts')
@@ -523,6 +630,7 @@ def api_get_checklist(checklist_id):
 @dashboard_bp.route('/api/checklist/<int:checklist_id>', methods=['PUT'])
 @login_required
 def api_update_checklist(checklist_id):
+    import logging
     """Update checklist data from the editor."""
     checklist = Checklist.query.filter_by(
         id=checklist_id, 
@@ -539,9 +647,17 @@ def api_update_checklist(checklist_id):
         checklist.description = request_data['description']
     if 'category' in request_data:
         checklist.category = request_data['category']
-    if 'data' in request_data:
-        checklist.items = json.dumps(request_data['data'])
+    # if 'data' in request_data:
+        # checklist.items = json.dumps(request_data['data'])
+    # Handle json_content updates (for checklist editor)
+    if 'json_content' in request_data:
+        logging.info(f"Updating checklist {checklist_id} with new json_content")
+        checklist.json_content = request_data['json_content']
+    # If data is provided without explicit json_content, also update json_content
+    elif 'data' in request_data:
+        checklist.json_content = request_data['data']
     
+    checklist.updated_at = db.func.now()
     db.session.commit()
     
     return jsonify({

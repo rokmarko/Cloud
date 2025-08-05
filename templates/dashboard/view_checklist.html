@@ -373,7 +373,7 @@ function loadChecklistData() {
     const iframe = document.getElementById('checklistEditor');
     
     // Fetch checklist data from your backend
-    fetch(`/api/checklist/${currentChecklistId}`)
+    fetch(`/dashboard/api/checklist/${currentChecklistId}/load_json`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);

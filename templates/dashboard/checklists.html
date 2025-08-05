@@ -24,6 +24,7 @@
             </div>
             <div class="modal-body p-0">
                 <!-- Iframe with deferred loading - no initial src attribute -->
+                    <!-- data-src="http://localhost:30000/" -->
                 <iframe 
                     id="checklistEditor" 
                     data-src="https://www.kanardia.eu/apps/checklist"
@@ -84,8 +85,8 @@
                         <button class="btn btn-primary btn-sm" onclick="openChecklistEditor({{ checklist.id }}, '{{ checklist.title }}')">
                             <span class="material-icons me-1">edit</span> Edit
                         </button>
-                        <a href="{{ url_for('dashboard.view_checklist', checklist_id=checklist.id) }}" class="btn btn-outline-primary btn-sm">
-                            <span class="material-icons me-1">visibility</span> View
+                        <a href="{{ url_for('dashboard.export_checklist', checklist_id=checklist.id) }}" class="btn btn-outline-success btn-sm">
+                            <span class="material-icons me-1">download</span> Export
                         </a>
                         <div class="dropdown">
                             <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown">
@@ -146,6 +147,9 @@ function handleEditorMessage(event) {
                 hideLoadingIndicator();
                 // Call load method after init is received
                 loadChecklistData();
+            }
+            else if (payload.event === 'autosave') {
+                saveChecklistData(payload.xml);
             }
         } catch (error) {
             console.error('Error parsing editor message:', error);
@@ -243,7 +247,7 @@ function loadChecklistData() {
     const iframe = document.getElementById('checklistEditor');
     
     // Fetch checklist data from your backend
-    fetch(`/api/checklist/${currentChecklistId}`)
+    fetch(`/dashboard/api/checklist/${currentChecklistId}/load_json`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -252,10 +256,9 @@ function loadChecklistData() {
         })
         .then(data => {
             // Send data to the iframe
-            iframe.contentWindow.postMessage({
-                action: 'load',
-                data: data
-            }, 'https://www.kanardia.eu');
+            iframe.contentWindow.postMessage(JSON.stringify({
+                action: 'load', xml: JSON.stringify(data), title: "Test"
+            }), 'https://www.kanardia.eu');
         })
         .catch(error => {
             console.error('Error loading checklist:', error);
@@ -320,6 +323,48 @@ function saveChecklist() {
     }
     
     window.addEventListener('message', handleSaveResponse);
+}
+
+/**
+ * Save checklist data directly (for autosave functionality)
+ * @param {Object} data - The checklist data to save
+ */
+function saveChecklistData(data) {
+    if (!currentChecklistId) {
+        console.error('No checklist ID available for saving');
+        return;
+    }
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Save to backend API
+    fetch(`/dashboard/api/checklist/${currentChecklistId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            json_content: data
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(result => {
+        console.log('Checklist autosaved successfully:', result);
+        // Optional: Show a subtle notification that data was saved
+        // You could add a small "Saved" indicator here
+    })
+    .catch(error => {
+        console.error('Error autosaving checklist:', error);
+        // Don't show alert for autosave failures as they can be disruptive
+        // Instead, log the error for debugging
+    });
 }
 
 /**

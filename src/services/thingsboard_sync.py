@@ -143,14 +143,13 @@ class ThingsBoardSyncService:
             Dict with sync results and statistics
         """
         results = {
-            'total_devices': 0,
             'synced_devices': 0,
-            'total_entries': 0,
+            'total_devices': 0,
             'new_entries': 0,
-            'total_events': 0,
+            'total_entries': 0,
             'new_events': 0,
+            'total_events': 0,
             'new_logbook_entries': 0,
-            'removed_logbook_entries': 0,
             'errors': []
         }
         
@@ -178,7 +177,6 @@ class ThingsBoardSyncService:
                     results['new_events'] += events_result.get('new_events', 0)
                     results['total_events'] += events_result.get('total_events', 0)
                     results['new_logbook_entries'] += events_result.get('new_logbook_entries', 0)
-                    results['removed_logbook_entries'] += events_result.get('removed_logbook_entries', 0)
                     
                     # Combine errors
                     # results['errors'].extend(device_result.get('errors', []))
@@ -191,8 +189,7 @@ class ThingsBoardSyncService:
             
             logger.info(f"Sync completed: {results['synced_devices']}/{results['total_devices']} devices, "
                        f"{results['new_entries']} new entries, {results['new_events']} new events, "
-                       f"{results['new_logbook_entries']} new logbook entries, "
-                       f"{results['removed_logbook_entries']} removed logbook entries from events")
+                       f"{results['new_logbook_entries']} new logbook entries")
             
         except Exception as e:
             error_msg = f"Fatal error during sync: {str(e)}"
@@ -693,24 +690,24 @@ class ThingsBoardSyncService:
                 if self._process_device_event(device, event):
                     result['new_events'] += 1
             
-            # Always rebuild logbook entries from ALL events after sync (not just new events)
-            logger.info(f"Rebuilding complete logbook from all events for device {device.name}")
-            try:
-                logbook_results = self._rebuild_complete_logbook_from_events(device)
-                result['new_logbook_entries'] = logbook_results.get('new_entries', 0)
-                result['updated_logbook_entries'] = logbook_results.get('updated_entries', 0)
-                result['removed_logbook_entries'] = logbook_results.get('removed_entries', 0)
-                if logbook_results.get('errors'):
-                    result['errors'].extend(logbook_results['errors'])
-                
-                logger.info(f"Logbook rebuild completed for device {device.name}: "
-                           f"{result.get('new_logbook_entries', 0)} new, "
-                           f"{result.get('updated_logbook_entries', 0)} updated, "
-                           f"{result.get('removed_logbook_entries', 0)} removed entries")
-            except Exception as e:
-                error_msg = f"Failed to rebuild logbook from events for device {device.name}: {str(e)}"
-                logger.error(error_msg)
-                result['errors'].append(error_msg)
+            # Only process new logbook entries from new events (not rebuild everything)
+            if result['new_events'] > 0:
+                logger.info(f"Processing logbook entries from new events for device {device.name}")
+                try:
+                    logbook_results = self._build_logbook_entries_from_new_events(device, result['new_events'])
+                    result['new_logbook_entries'] = logbook_results.get('new_entries', 0)
+                    result['updated_logbook_entries'] = logbook_results.get('updated_entries', 0)
+                    if logbook_results.get('errors'):
+                        result['errors'].extend(logbook_results['errors'])
+                    
+                    logger.info(f"New logbook entries from events for device {device.name}: "
+                               f"{result.get('new_logbook_entries', 0)} new entries")
+                except Exception as e:
+                    error_msg = f"Failed to build logbook from new events for device {device.name}: {str(e)}"
+                    logger.error(error_msg)
+                    result['errors'].append(error_msg)
+            else:
+                logger.debug(f"No new events for device {device.name}, skipping logbook generation")
             
             # Commit all changes for this device
             db.session.commit()
@@ -920,6 +917,99 @@ class ThingsBoardSyncService:
             result['errors'].append(error_msg)
             return result
     
+    def _build_logbook_entries_from_new_events(self, device: Device, num_new_events: int) -> Dict[str, Any]:
+        """
+        Build logbook entries from the latest takeoff/landing event pairs (only new events).
+        This is more efficient than rebuilding the entire logbook.
+        
+        Args:
+            device: Device instance
+            num_new_events: Number of new events that were just added
+            
+        Returns:
+            Dict with results of logbook entry creation
+        """
+        result = {
+            'new_entries': 0,
+            'updated_entries': 0,
+            'errors': []
+        }
+        
+        try:
+            # Get recent events (last processed + some overlap for sequence completion)
+            # We need more than just the new events to ensure we can complete flight sequences
+            lookback_buffer = max(20, num_new_events * 2)  # At least 20 events or 2x new events
+            
+            recent_events = Event.query.filter_by(device_id=device.id)\
+                .order_by(Event.total_time.desc())\
+                .limit(lookback_buffer).all()
+            
+            if not recent_events:
+                logger.debug(f"No recent events found for device {device.name}")
+                return result
+            
+            # Reverse to get chronological order for processing
+            recent_events.reverse()
+            
+            # Filter for takeoff and landing events in chronological order
+            takeoff_events = [e for e in recent_events if e.has_event_bit('Takeoff')]
+            landing_events = [e for e in recent_events if e.has_event_bit('Landing')]
+            
+            logger.debug(f"Processing {len(takeoff_events)} takeoff and {len(landing_events)} landing events "
+                        f"from recent {len(recent_events)} events for device {device.name}")
+            
+            if not takeoff_events or not landing_events:
+                logger.debug(f"No complete takeoff/landing pairs in recent events for device {device.name}")
+                return result
+            
+            # Build flight sequences from recent events
+            flight_sequences = self._build_flight_sequences(takeoff_events, landing_events)
+            
+            logger.debug(f"Built {len(flight_sequences)} flight sequences from recent events for device {device.name}")
+            
+            # Only create logbook entries that don't already exist
+            for sequence in flight_sequences:
+                try:
+                    # Check if this sequence already has a logbook entry
+                    takeoff_event = sequence['takeoff_event']
+                    final_landing_event = sequence['landing_events'][-1]
+                    
+                    # Calculate expected takeoff/landing times for duplicate check
+                    if takeoff_event.date_time:
+                        takeoff_datetime = takeoff_event.date_time
+                        flight_duration_ms = final_landing_event.total_time - takeoff_event.total_time
+                        landing_datetime = takeoff_datetime + timedelta(milliseconds=flight_duration_ms)
+                    else:
+                        # Skip sequences without datetime info
+                        continue
+                    
+                    # Check if logbook entry already exists for this sequence
+                    existing_entry = LogbookEntry.query.filter_by(
+                        device_id=device.id,
+                        takeoff_datetime=takeoff_datetime,
+                        landing_datetime=landing_datetime
+                    ).first()
+                    
+                    if not existing_entry:
+                        if self._create_logbook_entry_from_events(device, sequence):
+                            result['new_entries'] += 1
+                            logger.debug(f"Created new logbook entry from recent events for device {device.name}")
+                    else:
+                        logger.debug(f"Logbook entry already exists for sequence starting at {takeoff_event.total_time}ms")
+                        
+                except Exception as e:
+                    error_msg = f"Failed to create logbook entry from recent events: {str(e)}"
+                    logger.error(error_msg)
+                    result['errors'].append(error_msg)
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"Error building logbook entries from new events for device {device.name}: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+            return result
+
     def _build_logbook_entries_from_events(self, device: Device) -> Dict[str, Any]:
         """
         Build logbook entries from takeoff/landing event pairs.
@@ -1174,7 +1264,7 @@ class ThingsBoardSyncService:
                 logger.debug(f"Logbook entry already exists for flight sequence starting at {takeoff_event.total_time}ms")
                 return False
             
-            # Create logbook entry
+            # Create logbook entry - always create entries, even for unmapped pilots
             logbook_entry = LogbookEntry(
                 takeoff_datetime=takeoff_datetime,
                 landing_datetime=landing_datetime,
@@ -1193,9 +1283,9 @@ class ThingsBoardSyncService:
                 remarks=f'Generated from device events - Takeoff: {takeoff_event.format_log_time()}, '
                        f'Final Landing: {final_landing_event.format_log_time()}, '
                        f'Total Landings: {len(landing_events)}',
-                pilot_name=None,  # Could be enhanced with pilot detection
-                user_id=device.user_id,  # Assign to device owner
-                device_id=device.id
+                pilot_name=None,  # Could be enhanced with pilot detection from events
+                user_id=None,  # Don't assign to any specific user - will be visible in device logbook
+                device_id=device.id  # Always link to device for visibility
             )
             
             db.session.add(logbook_entry)

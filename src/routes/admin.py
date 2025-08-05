@@ -2,6 +2,7 @@
 Admin routes for KanardiaCloud
 """
 
+import logging
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
 from functools import wraps
@@ -12,6 +13,7 @@ from src.forms import PilotMappingForm
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
 
+logger = logging.getLogger(__name__)
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
@@ -200,6 +202,52 @@ def api_unlink_device(device_id):
     })
 
 
+@admin_bp.route('/devices/<int:device_id>/force-rebuild-logbook', methods=['POST'])
+@login_required
+@admin_required
+def force_rebuild_logbook(device_id):
+    """Force rebuild complete logbook for a device."""
+    device = Device.query.get_or_404(device_id)
+    
+    try:
+        # Clear event messages for this device
+        # cleared_messages = LogbookEntry.query.filter_by(device_id=device.id).delete()
+        # logger.info(f"Cleared {cleared_messages} logbook entries for device {device.name}")
+        
+        # Force rebuild complete logbook from events
+        result = thingsboard_sync._rebuild_complete_logbook_from_events(device)
+        
+        # Commit the changes
+        db.session.commit()
+        
+        message = (f"Force rebuild completed for device '{device.name}': "
+                  f"cleared {cleared_messages} event messages, "
+                  f"removed {result.get('removed_entries', 0)} old entries, "
+                  f"created {result.get('new_entries', 0)} new entries")
+        
+        if result.get('errors'):
+            logger.warning(f"Force rebuild had errors: {result['errors']}")
+            return jsonify({
+                'success': False,
+                'message': f"Rebuild completed with errors: {'; '.join(result['errors'])}"
+            })
+        
+        logger.info(message)
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = f"Error during force rebuild for device {device.name}: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({
+            'success': False,
+            'message': error_msg
+        })
+
+
 @admin_bp.route('/users/<int:user_id>/toggle-admin', methods=['POST'])
 @login_required
 @admin_required
@@ -330,12 +378,10 @@ def run_sync_manually():
         # Show results in flash message
         if results.get('errors'):
             flash(f"Sync completed with errors: {results['new_entries']}/{results['total_entries']} entries, "
-                  f"{results['new_events']} events, {results.get('new_logbook_entries', 0)} new/"
-                  f"{results.get('removed_logbook_entries', 0)} removed logbook entries. Check logs for details.", 'warning')
+                  f"{results['new_events']} events, {results.get('new_logbook_entries', 0)} new logbook entries. Check logs for details.", 'warning')
         else:
             flash(f"Sync completed successfully: {results['new_entries']}/{results['total_entries']} new entries, "
-                  f"{results['new_events']} new events, {results.get('new_logbook_entries', 0)} new/"
-                  f"{results.get('removed_logbook_entries', 0)} removed logbook entries from events "
+                  f"{results['new_events']} new events, {results.get('new_logbook_entries', 0)} new logbook entries "
                   f"synced from {results['synced_devices']}/{results['total_devices']} devices.", 'success')
         
     except Exception as e:

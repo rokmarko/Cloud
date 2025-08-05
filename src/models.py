@@ -128,6 +128,7 @@ class Checklist(db.Model):
     description = db.Column(db.Text)
     category = db.Column(db.String(50), nullable=False)  # preflight, takeoff, landing, emergency
     items = db.Column(db.Text, nullable=False)  # JSON string of checklist items
+    json_content = db.Column(db.Text, nullable=False)  # Full JSON content of the checklist
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

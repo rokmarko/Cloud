@@ -241,7 +241,12 @@
         <i class="bi bi-journal-x display-1 text-muted mb-4"></i>
         <h3 class="text-muted">No logbook entries</h3>
         <p class="text-muted">No flights have been logged for this device yet.</p>
-        <p class="text-muted">Logbook entries will appear here when they are linked to this device through ThingsBoard sync or pilot mappings.</p>
+        <p class="text-muted">
+            Logbook entries will appear here when:
+            <br>• Device events are synced from ThingsBoard (all pilots)
+            <br>• Manual entries are created and linked to this device
+            <br>• Pilot mappings connect user flights to this device
+        </p>
     </div>
 </div>
 {% endif %}
