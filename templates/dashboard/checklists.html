@@ -6,9 +6,14 @@
 
 <div class="page-header">
     <h1><span class="material-icons">checklist</span> Checklists</h1>
-    <a href="{{ url_for('dashboard.add_checklist') }}" class="btn btn-primary">
-        <span class="material-icons me-2">add_circle</span> Create Checklist
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.import_checklist') }}" class="btn btn-outline-primary">
+            <span class="material-icons me-2">upload_file</span> Import Checklist
+        </a>
+        <a href="{{ url_for('dashboard.add_checklist') }}" class="btn btn-primary">
+            <span class="material-icons me-2">add_circle</span> Create Checklist
+        </a>
+    </div>
 </div>
 
 <!-- Checklist Editor Modal -->
@@ -54,6 +59,50 @@
     </div>
 </div>
 
+<!-- Send To Device Modal -->
+<div class="modal fade" id="sendToModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">send</span>
+                    Send Checklist to Device
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Checklist:</label>
+                    <div class="form-control-plaintext" id="sendChecklistTitle">
+                        <strong id="sendChecklistName"></strong>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="deviceSelect" class="form-label">Select Device:</label>
+                    <select class="form-select" id="deviceSelect">
+                        <option value="">Loading devices...</option>
+                    </select>
+                    <div class="form-text">
+                        You can send to your own devices or devices where you are mapped as a pilot.
+                    </div>
+                </div>
+                
+                <div id="sendError" class="alert alert-danger d-none"></div>
+                <div id="sendSuccess" class="alert alert-success d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span class="material-icons me-1">close</span> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="sendChecklistToDevice()" id="sendButton">
+                    <span class="material-icons me-1">send</span> Send Checklist
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% if checklists %}
     <div class="row g-4">
         {% for checklist in checklists %}
@@ -93,6 +142,17 @@
                                 <span class="material-icons">more_vert</span>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="showSendToModal({{ checklist.id }}, '{{ checklist.title }}')">
+                                        <span class="material-icons me-2">send</span> Send To Device
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="renameChecklist({{ checklist.id }}, '{{ checklist.title }}')">
+                                        <span class="material-icons me-2">edit</span> Rename
+                                    </a>
+                                </li>
                                 <li>
                                     <a class="dropdown-item" href="#" onclick="duplicateChecklist({{ checklist.id }})">
                                         <span class="material-icons me-2">content_copy</span> Duplicate
@@ -291,7 +351,7 @@ function saveChecklist() {
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             
             // Save to your backend
-            fetch(`/api/checklist/${currentChecklistId}`, {
+            fetch(`/dashboard/api/checklist/${currentChecklistId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -376,7 +436,7 @@ function duplicateChecklist(checklistId) {
         // Get CSRF token from meta tag
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         
-        fetch(`/api/checklist/${checklistId}/duplicate`, {
+        fetch(`/dashboard/api/checklist/${checklistId}/duplicate`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': csrfToken,
@@ -408,7 +468,7 @@ function deleteChecklist(checklistId) {
         // Get CSRF token from meta tag
         const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
         
-        fetch(`/api/checklist/${checklistId}`, {
+        fetch(`/dashboard/api/checklist/${checklistId}`, {
             method: 'DELETE',
             headers: {
                 'X-CSRFToken': csrfToken,
@@ -429,6 +489,179 @@ function deleteChecklist(checklistId) {
             alert('Error deleting checklist. Please try again.');
         });
     }
+}
+
+function renameChecklist(checklistId) {
+    const newTitle = prompt('Enter new checklist title:');
+    if (newTitle && newTitle.trim()) {
+        // Get CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        fetch(`/dashboard/api/checklist/${checklistId}/rename`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                title: newTitle.trim()
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error renaming checklist:', error);
+            alert('Error renaming checklist. Please try again.');
+        });
+    }
+}
+
+let currentChecklistToSend = null;
+
+/**
+ * Show the Send To modal and load devices
+ * @param {number} checklistId - The ID of the checklist to send
+ * @param {string} checklistTitle - The title of the checklist
+ */
+function showSendToModal(checklistId, checklistTitle) {
+    currentChecklistToSend = checklistId;
+    
+    // Set checklist name in modal
+    document.getElementById('sendChecklistName').textContent = checklistTitle;
+    
+    // Reset modal state
+    document.getElementById('sendError').classList.add('d-none');
+    document.getElementById('sendSuccess').classList.add('d-none');
+    document.getElementById('sendButton').disabled = false;
+    
+    // Load devices
+    loadAvailableDevices();
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('sendToModal'));
+    modal.show();
+}
+
+/**
+ * Load devices that the user can send checklists to
+ */
+function loadAvailableDevices() {
+    const deviceSelect = document.getElementById('deviceSelect');
+    deviceSelect.innerHTML = '<option value="">Loading devices...</option>';
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    fetch('/dashboard/api/available-devices', {
+        method: 'GET',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        deviceSelect.innerHTML = '';
+        
+        if (data.devices && data.devices.length > 0) {
+            deviceSelect.innerHTML = '<option value="">Select a device...</option>';
+            
+            data.devices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.id;
+                option.textContent = `${device.name} (${device.type}) ${device.ownership}`;
+                deviceSelect.appendChild(option);
+            });
+        } else {
+            deviceSelect.innerHTML = '<option value="">No devices available</option>';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading devices:', error);
+        deviceSelect.innerHTML = '<option value="">Error loading devices</option>';
+    });
+}
+
+/**
+ * Send checklist to selected device
+ */
+function sendChecklistToDevice() {
+    const deviceId = document.getElementById('deviceSelect').value;
+    const errorDiv = document.getElementById('sendError');
+    const successDiv = document.getElementById('sendSuccess');
+    const sendButton = document.getElementById('sendButton');
+    
+    // Reset alerts
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    if (!deviceId) {
+        errorDiv.textContent = 'Please select a device.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+    
+    if (!currentChecklistToSend) {
+        errorDiv.textContent = 'No checklist selected.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+    
+    // Disable send button
+    sendButton.disabled = true;
+    sendButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    fetch(`/dashboard/api/checklist/${currentChecklistToSend}/send`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            device_id: parseInt(deviceId)
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        successDiv.textContent = data.message || 'Checklist sent successfully!';
+        successDiv.classList.remove('d-none');
+        
+        // Close modal after 2 seconds
+        setTimeout(() => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('sendToModal'));
+            modal.hide();
+        }, 2000);
+    })
+    .catch(error => {
+        console.error('Error sending checklist:', error);
+        errorDiv.textContent = 'Error sending checklist. Please try again.';
+        errorDiv.classList.remove('d-none');
+    })
+    .finally(() => {
+        // Re-enable send button
+        sendButton.disabled = false;
+        sendButton.innerHTML = '<span class="material-icons me-1">send</span> Send Checklist';
+    });
 }
 </script>
 

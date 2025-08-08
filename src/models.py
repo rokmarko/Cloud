@@ -165,8 +165,10 @@ class InstrumentLayout(db.Model):
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     category = db.Column(db.String(50), nullable=False)  # primary, secondary, backup, custom
+    instrument_type = db.Column(db.String(50), nullable=False)  # digi, indu_57mm, indu_80mm, altimeter_80mm
     layout_data = db.Column(db.Text, nullable=False)  # JSON string of layout configuration
-    json_content = db.Column(db.Text, nullable=False)  # Full JSON content of the layout
+    xml_content = db.Column(db.Text, nullable=False)  # Full XML content of the layout
+    thumbnail_filename = db.Column(db.String(255), nullable=True)  # PNG thumbnail filename
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

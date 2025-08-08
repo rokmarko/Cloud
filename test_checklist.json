@@ -1,0 +1,70 @@
+{
+  "CheckList": {
+    "Type": 1,
+    "Name": "Pre-flight Checklist",
+    "Children": [
+      {
+        "Type": 2,
+        "Name": "External Inspection",
+        "Children": [
+          {
+            "Type": 3,
+            "Name": "Check fuel quantity - SUFFICIENT",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Inspect control surfaces - FREE & CLEAR",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Verify engine oil level - CHECK",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Test flight controls - FULL MOVEMENT",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Check tire pressure - NORMAL",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Inspect propeller - NO DAMAGE",
+            "Children": []
+          }
+        ]
+      },
+      {
+        "Type": 2,
+        "Name": "Cockpit Setup",
+        "Children": [
+          {
+            "Type": 3,
+            "Name": "Seat and harness - ADJUST & SECURE",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Flight controls - CHECK",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Instruments - CHECK & SET",
+            "Children": []
+          },
+          {
+            "Type": 3,
+            "Name": "Radio - CHECK & SET",
+            "Children": []
+          }
+        ]
+      }
+    ]
+  }
+}

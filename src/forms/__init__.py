@@ -3,6 +3,7 @@ Forms for authentication and user management
 """
 
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileField, FileAllowed, FileRequired
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, SelectField, DateField, FloatField, IntegerField, DateTimeLocalField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError, Optional
 from src.models import User
@@ -98,6 +99,15 @@ class ChecklistCreateForm(FlaskForm):
     submit = SubmitField('Create Checklist')
 
 
+class ChecklistImportForm(FlaskForm):
+    """Simplified checklist import form for .ckl files."""
+    file = FileField('Checklist File (*.ckl)', validators=[
+        FileRequired('Please select a .ckl file to import'),
+        FileAllowed(['ckl'], 'Only .ckl files are allowed')
+    ])
+    submit = SubmitField('Import Checklist')
+
+
 class InstrumentLayoutForm(FlaskForm):
     """Instrument layout form."""
     title = StringField('Title', validators=[DataRequired(), Length(max=200)])
@@ -115,6 +125,12 @@ class InstrumentLayoutForm(FlaskForm):
 class InstrumentLayoutCreateForm(FlaskForm):
     """Simplified instrument layout creation form - only title required."""
     title = StringField('Layout Title', validators=[DataRequired(), Length(max=200)])
+    instrument_type = SelectField('Instrument Type', choices=[
+        ('digi', 'Digi'),
+        ('indu_57mm', 'Indu 57mm'),
+        ('indu_80mm', 'Indu 80mm'),
+        ('altimeter_80mm', 'Altimeter 80mm')
+    ], validators=[DataRequired()])
     submit = SubmitField('Create Layout')
 
 

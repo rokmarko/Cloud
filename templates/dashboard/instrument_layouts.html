@@ -58,6 +58,17 @@
         {% for layout in layouts %}
         <div class="col-lg-4 col-md-6">
             <div class="card layout-card">
+                {% if layout.thumbnail_filename %}
+                    <img src="{{ url_for('dashboard.serve_thumbnail', filename=layout.thumbnail_filename) }}" 
+                         class="card-img-top layout-thumbnail" 
+                         alt="{{ layout.title }} thumbnail"
+                         style="height: 200px; object-fit: cover;">
+                {% else %}
+                    <div class="card-img-top layout-placeholder d-flex align-items-center justify-content-center" 
+                         style="height: 200px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+                        <span class="material-icons" style="font-size: 4rem; color: #adb5bd;">dashboard</span>
+                    </div>
+                {% endif %}
                 <div class="card-body">
                     <h5 class="card-title">
                         <span class="material-icons me-2" style="color: var(--kanardia-orange);">dashboard</span>
@@ -66,6 +77,14 @@
                     <h6 class="card-subtitle mb-3">
                         <span class="badge" style="background: var(--kanardia-red); color: white;">
                             {{ layout.category.title() }}
+                        </span>
+                        <span class="badge ms-2" style="background: var(--kanardia-orange); color: white;">
+                            {% if layout.instrument_type == 'digi' %}Digi
+                            {% elif layout.instrument_type == 'indu_57mm' %}Indu 57mm
+                            {% elif layout.instrument_type == 'indu_80mm' %}Indu 80mm
+                            {% elif layout.instrument_type == 'altimeter_80mm' %}Altimeter 80mm
+                            {% else %}{{ layout.instrument_type.title() }}
+                            {% endif %}
                         </span>
                     </h6>
                     
@@ -95,6 +114,11 @@
                                 <li>
                                     <a class="dropdown-item" href="#" onclick="duplicateInstrumentLayout({{ layout.id }})">
                                         <span class="material-icons me-2">content_copy</span> Duplicate
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="renameInstrumentLayout({{ layout.id }})">
+                                        <span class="material-icons me-2">edit</span> Rename
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
@@ -256,7 +280,7 @@ function loadInstrumentLayoutData() {
         .then(data => {
             // Send data to the iframe
             iframe.contentWindow.postMessage(JSON.stringify({
-                action: 'load', xml: JSON.stringify(data), title: "Test"
+                action: 'load', xml: data.content, title: data.title
             }), 'https://www.kanardia.eu');
         })
         .catch(error => {
@@ -286,37 +310,62 @@ function saveInstrumentLayout() {
         if (event.origin !== 'https://www.kanardia.eu') return;
         
         if (event.data && event.data.action === 'dataResponse') {
-            // Get CSRF token from meta tag
-            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            // Request thumbnail from iframe
+            iframe.contentWindow.postMessage({
+                action: 'getThumbnail',
+                width: 300,
+                height: 200
+            }, 'https://www.kanardia.eu');
             
-            // Save to your backend
-            fetch(`/dashboard/api/instrument-layout/${currentLayoutId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify(event.data.data)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+            // Wait for thumbnail response
+            function handleThumbnailResponse(thumbnailEvent) {
+                if (thumbnailEvent.origin !== 'https://www.kanardia.eu') return;
+                
+                if (thumbnailEvent.data && thumbnailEvent.data.action === 'thumbnailResponse') {
+                    // Get CSRF token from meta tag
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                    
+                    // Prepare data for saving including thumbnail
+                    const saveData = {
+                        ...event.data.data,
+                        thumbnail: thumbnailEvent.data.thumbnail
+                    };
+                    
+                    // Save to your backend
+                    fetch(`/dashboard/api/instrument-layout/${currentLayoutId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify(saveData)
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Close modal and refresh page
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                        location.reload();
+                    })
+                    .catch(error => {
+                        console.error('Error saving instrument layout:', error);
+                        alert('Error saving instrument layout. Please try again.');
+                    });
+                    
+                    // Remove event listeners
+                    window.removeEventListener('message', handleThumbnailResponse);
                 }
-                return response.json();
-            })
-            .then(data => {
-                // Close modal and refresh page
-                if (modalInstance) {
-                    modalInstance.hide();
-                }
-                location.reload();
-            })
-            .catch(error => {
-                console.error('Error saving instrument layout:', error);
-                alert('Error saving instrument layout. Please try again.');
-            });
+            }
             
-            // Remove the event listener
+            window.addEventListener('message', handleThumbnailResponse);
+            
+            // Remove the original event listener
             window.removeEventListener('message', handleSaveResponse);
         }
     }
@@ -345,7 +394,7 @@ function saveInstrumentLayoutData(data) {
             'X-CSRFToken': csrfToken
         },
         body: JSON.stringify({
-            json_content: data
+            xml_content: data
         })
     })
     .then(response => {
@@ -425,6 +474,42 @@ function deleteInstrumentLayout(layoutId) {
         });
     }
 }
+
+/**
+ * Rename an instrument layout
+ * @param {number} layoutId - The ID of the layout to rename
+ */
+function renameInstrumentLayout(layoutId) {
+    const newTitle = prompt('Enter new layout title:');
+    if (newTitle && newTitle.trim()) {
+        // Get CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        fetch(`/dashboard/api/instrument-layout/${layoutId}/rename`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                title: newTitle.trim()
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error renaming instrument layout:', error);
+            alert('Error renaming instrument layout. Please try again.');
+        });
+    }
+}
 </script>
 
 <style>
@@ -432,11 +517,28 @@ function deleteInstrumentLayout(layoutId) {
     transition: all 0.3s ease;
     border: none;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    overflow: hidden;
 }
 
 .layout-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.layout-thumbnail {
+    transition: transform 0.3s ease;
+}
+
+.layout-card:hover .layout-thumbnail {
+    transform: scale(1.05);
+}
+
+.layout-placeholder {
+    transition: all 0.3s ease;
+}
+
+.layout-card:hover .layout-placeholder {
+    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
 }
 
 .page-header {

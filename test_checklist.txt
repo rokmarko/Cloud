@@ -1,0 +1,14 @@
+Check fuel quantity - SUFFICIENT
+Inspect control surfaces - FREE & CLEAR
+Verify engine oil level - CHECK
+Test flight controls - FULL MOVEMENT
+Check tire pressure - NORMAL
+Inspect propeller - NO DAMAGE
+Seat and harness - ADJUST & SECURE
+Flight controls - CHECK
+Instruments - CHECK & SET
+Radio - CHECK & SET
+Engine start - CLEAR PROP
+Engine warm-up - MONITOR TEMPS
+Run-up check - COMPLETE
+Final checks - COMPLETE

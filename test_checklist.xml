@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checklist name="Pre-flight Checklist">
+  <section name="External Inspection">
+    <item>Check fuel quantity - SUFFICIENT</item>
+    <item>Inspect control surfaces - FREE and CLEAR</item>
+    <item>Verify engine oil level - CHECK</item>
+    <item>Test flight controls - FULL MOVEMENT</item>
+    <item>Check tire pressure - NORMAL</item>
+    <item>Inspect propeller - NO DAMAGE</item>
+  </section>
+  <section name="Cockpit Setup">
+    <item>Seat and harness - ADJUST and SECURE</item>
+    <item>Flight controls - CHECK</item>
+    <item>Instruments - CHECK and SET</item>
+    <item>Radio - CHECK and SET</item>
+  </section>
+</checklist>

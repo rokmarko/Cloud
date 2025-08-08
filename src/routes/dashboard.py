@@ -2,14 +2,99 @@
 Dashboard and application feature routes
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
+import logging
+import os
+import base64
+import uuid
+from io import BytesIO
+from PIL import Image
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
 from src.app import db
 from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
-from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, LogbookEntryForm, InitialLogbookTimeForm
+from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, LogbookEntryForm, InitialLogbookTimeForm
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+
+def generate_thumbnail_from_base64(base64_data, layout_id, thumbnail_size=(300, 200)):
+    """
+    Generate a PNG thumbnail from base64 image data.
+    
+    Args:
+        base64_data: Base64 encoded image data (may include data URI prefix)
+        layout_id: ID of the instrument layout for filename
+        thumbnail_size: Tuple of (width, height) for thumbnail size
+    
+    Returns:
+        str: Filename of saved thumbnail, or None if failed
+    """
+    try:
+        # Remove data URI prefix if present (e.g., "data:image/png;base64,")
+        if ',' in base64_data:
+            base64_data = base64_data.split(',')[1]
+        
+        # Decode base64 data
+        image_data = base64.b64decode(base64_data)
+        
+        # Open image with PIL
+        image = Image.open(BytesIO(image_data))
+        
+        # Convert to RGB if necessary (for PNG with transparency)
+        if image.mode in ('RGBA', 'LA', 'P'):
+            # Create white background
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            background.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+            image = background
+        
+        # Resize to thumbnail size while maintaining aspect ratio
+        image.thumbnail(thumbnail_size, Image.Resampling.LANCZOS)
+        
+        # Create thumbnail with white background if needed
+        if image.size != thumbnail_size:
+            thumbnail = Image.new('RGB', thumbnail_size, (255, 255, 255))
+            # Center the image
+            x = (thumbnail_size[0] - image.size[0]) // 2
+            y = (thumbnail_size[1] - image.size[1]) // 2
+            thumbnail.paste(image, (x, y))
+            image = thumbnail
+        
+        # Generate unique filename
+        filename = f"layout_{layout_id}_{uuid.uuid4().hex[:8]}.png"
+        
+        # Ensure thumbnails directory exists
+        thumbnails_dir = os.path.join(current_app.static_folder, 'thumbnails', 'instrument_layouts')
+        os.makedirs(thumbnails_dir, exist_ok=True)
+        
+        # Save thumbnail as PNG
+        filepath = os.path.join(thumbnails_dir, filename)
+        image.save(filepath, 'PNG', quality=95)
+        
+        return filename
+        
+    except Exception as e:
+        logging.error(f"Error generating thumbnail for layout {layout_id}: {e}")
+        return None
+
+
+def delete_thumbnail(filename):
+    """
+    Delete a thumbnail file.
+    
+    Args:
+        filename: Name of the thumbnail file to delete
+    """
+    if filename:
+        try:
+            filepath = os.path.join(current_app.static_folder, 'thumbnails', 'instrument_layouts', filename)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                logging.info(f"Deleted thumbnail: {filename}")
+        except Exception as e:
+            logging.error(f"Error deleting thumbnail {filename}: {e}")
 
 
 def calculate_logbook_totals(user_id):
@@ -366,6 +451,51 @@ def add_checklist():
     return render_template('dashboard/add_checklist_simple.html', title='Add Checklist', form=form)
 
 
+@dashboard_bp.route('/checklists/import', methods=['GET', 'POST'])
+@login_required
+def import_checklist():
+    """Import checklist from .ckl file."""
+    form = ChecklistImportForm()
+    
+    if form.validate_on_submit():
+        file = form.file.data
+        
+        try:
+            # Read file content directly
+            file_content = file.read().decode('utf-8')
+            
+            # Extract filename without extension for title
+            filename = file.filename
+            if filename.lower().endswith('.ckl'):
+                title = filename[:-4]  # Remove .ckl extension
+            else:
+                title = filename
+            
+            # Create checklist with file content directly in json_content
+            checklist = Checklist(
+                title=title,
+                description=f"Imported from {filename}",
+                category="other",  # Default category
+                items=json.dumps([]),  # Keep empty as we use json_content
+                json_content=file_content,  # Load content directly
+                user_id=current_user.id
+            )
+            
+            db.session.add(checklist)
+            db.session.commit()
+            
+            flash(f'Checklist "{title}" imported successfully from {filename}!', 'success')
+            return redirect(url_for('dashboard.checklists'))
+            
+        except UnicodeDecodeError:
+            flash('Could not read the file. Please ensure it is a text-based file with UTF-8 encoding.', 'danger')
+        except Exception as e:
+            flash(f'Error importing checklist: {str(e)}', 'danger')
+            logging.error(f"Error importing checklist: {e}")
+    
+    return render_template('dashboard/import_checklist.html', title='Import Checklist', form=form)
+
+
 @dashboard_bp.route('/checklists/<int:checklist_id>')
 @login_required
 def view_checklist(checklist_id):
@@ -449,28 +579,40 @@ def add_instrument_layout():
     if form.validate_on_submit():
         # Default instrument layout template
         default_template = {
-            "layout_type": "instrument_panel",
-            "version": "1.0",
-            "instruments": [],
-            "layout": {
-                "width": 1024,
-                "height": 768,
-                "background_color": "#000000",
-                "grid_enabled": True,
-                "grid_size": 10
-            },
-            "settings": {
-                "units": "metric",
-                "theme": "dark"
-            }
+            "panel": []
         }
-        
+        import dicttoxml
+
+        # Convert default_template to XML with attributes using dicttoxml
+        # To add attributes, use a structure like {'@attr': value, ...} for attributes in dicttoxml
+        # Example: {'panel': [], '@version': '1.0'} will add version="1.0" to the root
+
+        # Add attributes to the root element
+        xml_template = {
+            # '@instrument': 'Digi',
+            # '@model': 'I',
+            'panel': [],
+            'engine-type': "Generic Engine"
+        }
+        xml_content = dicttoxml.dicttoxml(
+            xml_template,
+            custom_root='indu',
+            attr_type=False
+        ).decode('utf-8')
+
+        xml_content = xml_content.replace('<indu>', '<indu instrument="Digi" model="I">', 1)
+        # import xml.dom.minidom
+        # Pretty-print the XML for logging/debugging
+        # pretty_xml = xml.dom.minidom.parseString(xml_content).toprettyxml(indent="  ")
+        # logging.debug("Instrument layout XML:\n%s", pretty_xml)
+
         layout = InstrumentLayout(
             title=form.title.data,
             description="",
             category="primary",
+            instrument_type=form.instrument_type.data,
             layout_data=json.dumps([]),  # Empty data for now
-            json_content=json.dumps(default_template),
+            xml_content=xml_content,
             user_id=current_user.id
         )
         db.session.add(layout)
@@ -494,7 +636,7 @@ def view_instrument_layout(layout_id):
 @dashboard_bp.route('/instrument-layouts/<int:layout_id>/export')
 @login_required
 def export_instrument_layout(layout_id):
-    """Export instrument layout json_content as downloadable file."""
+    """Export instrument layout xml_content as downloadable file."""
     from flask import Response
     import re
     
@@ -503,15 +645,15 @@ def export_instrument_layout(layout_id):
     # Clean the filename - remove special characters and spaces
     safe_filename = re.sub(r'[^\w\s-]', '', layout.title)
     safe_filename = re.sub(r'[-\s]+', '_', safe_filename)
-    filename = f"instrument_layout_{safe_filename}.json"
+    filename = f"instrument_layout_{safe_filename}.xml"
     
-    # Create response with JSON content
+    # Create response with XML content
     response = Response(
-        layout.json_content,
-        mimetype='application/json',
+        layout.xml_content,
+        mimetype='application/xml',
         headers={
             'Content-Disposition': f'attachment; filename="{filename}"',
-            'Content-Type': 'application/json; charset=utf-8'
+            'Content-Type': 'application/xml; charset=utf-8'
         }
     )
     
@@ -522,32 +664,15 @@ def export_instrument_layout(layout_id):
 @dashboard_bp.route('/api/instrument-layout/<int:layout_id>/load_json')
 @login_required
 def load_instrument_layout(layout_id):
-    """Load instrument layout json_content for editing."""
+    """Load instrument layout xml_content for editing."""
     layout = InstrumentLayout.query.filter_by(id=layout_id, user_id=current_user.id).first_or_404()
-    
-    # Parse the JSON content from the database and return as object
-    try:
-        json_data = json.loads(layout.json_content) if layout.json_content else {}
-    except (json.JSONDecodeError, TypeError):
-        # If parsing fails, return empty default structure
-        json_data = {
-            "layout_type": "instrument_panel",
-            "version": "1.0",
-            "instruments": [],
-            "layout": {
-                "width": 1024,
-                "height": 768,
-                "background_color": "#000000",
-                "grid_enabled": True,
-                "grid_size": 10
-            },
-            "settings": {
-                "units": "metric",
-                "theme": "dark"
-            }
-        }
-    
-    return jsonify(json_data)
+
+    reply = { 
+        "content": layout.xml_content,
+        "title": layout.title
+    }
+
+    return reply
 
 
 @dashboard_bp.route('/approach-charts')
@@ -838,6 +963,159 @@ def api_delete_checklist(checklist_id):
     })
 
 
+@dashboard_bp.route('/api/checklist/<int:checklist_id>/rename', methods=['POST'])
+@login_required
+def api_rename_checklist(checklist_id):
+    """Rename a checklist."""
+    checklist = Checklist.query.filter_by(
+        id=checklist_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    request_data = request.get_json()
+    new_title = request_data.get('title', '').strip()
+    
+    if not new_title:
+        return jsonify({
+            'success': False,
+            'message': 'Title cannot be empty'
+        }), 400
+    
+    if len(new_title) > 200:
+        return jsonify({
+            'success': False,
+            'message': 'Title cannot exceed 200 characters'
+        }), 400
+    
+    checklist.title = new_title
+    checklist.updated_at = db.func.now()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Checklist renamed successfully',
+        'new_title': new_title
+    })
+
+
+@dashboard_bp.route('/api/available-devices', methods=['GET'])
+@login_required
+def api_get_available_devices():
+    """Get devices that the user can send checklists to."""
+    devices = []
+    
+    # Get user's own devices
+    user_devices = Device.query.filter_by(user_id=current_user.id, is_active=True).all()
+    for device in user_devices:
+        devices.append({
+            'id': device.id,
+            'name': device.name,
+            'type': device.device_type.title(),
+            'registration': device.registration,
+            'ownership': '(Your Device)'
+        })
+    
+    # Get devices where user is mapped as pilot
+    pilot_mappings = Pilot.query.filter_by(user_id=current_user.id, is_active=True).all()
+    for pilot in pilot_mappings:
+        # Avoid duplicates (user's own devices)
+        if pilot.device.user_id != current_user.id and pilot.device.is_active:
+            devices.append({
+                'id': pilot.device.id,
+                'name': pilot.device.name,
+                'type': pilot.device.device_type.title(),
+                'registration': pilot.device.registration,
+                'ownership': f'(As pilot: {pilot.pilot_name})'
+            })
+    
+    return jsonify({
+        'success': True,
+        'devices': devices
+    })
+
+
+@dashboard_bp.route('/api/checklist/<int:checklist_id>/send', methods=['POST'])
+@login_required
+def api_send_checklist(checklist_id):
+    """Send checklist to a device."""
+    checklist = Checklist.query.filter_by(
+        id=checklist_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    request_data = request.get_json()
+    device_id = request_data.get('device_id')
+    
+    if not device_id:
+        return jsonify({
+            'success': False,
+            'message': 'Device ID is required'
+        }), 400
+    
+    # Check if user has access to this device
+    device = None
+    
+    # Check if it's user's own device
+    user_device = Device.query.filter_by(
+        id=device_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first()
+    
+    if user_device:
+        device = user_device
+    else:
+        # Check if user is mapped as pilot on this device
+        pilot_mapping = Pilot.query.filter_by(
+            user_id=current_user.id,
+            device_id=device_id,
+            is_active=True
+        ).first()
+        
+        if pilot_mapping and pilot_mapping.device.is_active:
+            device = pilot_mapping.device
+    
+    if not device:
+        return jsonify({
+            'success': False,
+            'message': 'You do not have access to this device'
+        }), 403
+    
+    try:
+        # TODO: Implement actual sending mechanism here
+        # This could involve:
+        # 1. Saving to a device-specific checklist queue
+        # 2. Sending via API to external device
+        # 3. Creating a notification/sync record
+        # For now, we'll just log it
+        
+        logging.info(f"Checklist '{checklist.title}' (ID: {checklist.id}) sent to device '{device.name}' (ID: {device.id}) by user {current_user.email}")
+        
+        # You could create a table to track sent checklists
+        # sent_checklist = SentChecklist(
+        #     checklist_id=checklist.id,
+        #     device_id=device.id,
+        #     sent_by_user_id=current_user.id,
+        #     sent_at=datetime.utcnow()
+        # )
+        # db.session.add(sent_checklist)
+        # db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Checklist "{checklist.title}" sent to {device.name} successfully!'
+        })
+        
+    except Exception as e:
+        logging.error(f"Error sending checklist {checklist_id} to device {device_id}: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to send checklist'
+        }), 500
+
+
 # API Endpoints for Instrument Layout Editor Integration
 
 @dashboard_bp.route('/api/instrument-layout/<int:layout_id>', methods=['GET'])
@@ -886,12 +1164,29 @@ def api_update_instrument_layout(layout_id):
         layout.category = request_data['category']
     if 'data' in request_data:
         layout.layout_data = json.dumps(request_data['data'])
-    # Handle json_content updates (for instrument layout editor)
-    if 'json_content' in request_data:
-        layout.json_content = json.dumps(request_data['json_content'])
-    # If data is provided without explicit json_content, also update json_content
+    # Handle xml_content updates (for instrument layout editor)
+    if 'xml_content' in request_data:
+        layout.xml_content = request_data['xml_content']
+    # If data is provided without explicit xml_content, also update xml_content
     elif 'data' in request_data:
-        layout.json_content = json.dumps(request_data['data'])
+        layout.xml_content = request_data['data']
+    
+    # Handle thumbnail generation if provided
+    if 'thumbnail' in request_data and request_data['thumbnail']:
+        # Delete old thumbnail if it exists
+        if layout.thumbnail_filename:
+            delete_thumbnail(layout.thumbnail_filename)
+        
+        # Generate new thumbnail
+        new_thumbnail = generate_thumbnail_from_base64(
+            request_data['thumbnail'], 
+            layout_id
+        )
+        if new_thumbnail:
+            layout.thumbnail_filename = new_thumbnail
+            logging.info(f"Generated thumbnail {new_thumbnail} for layout {layout_id}")
+        else:
+            logging.warning(f"Failed to generate thumbnail for layout {layout_id}")
     
     db.session.commit()
     
@@ -915,9 +1210,10 @@ def api_duplicate_instrument_layout(layout_id):
     duplicate = InstrumentLayout(
         title=f"{original.title} (Copy)",
         category=original.category,
+        instrument_type=original.instrument_type,
         description=original.description,
         layout_data=original.layout_data,
-        json_content=original.json_content,
+        xml_content=original.xml_content,
         user_id=current_user.id
     )
     
@@ -941,6 +1237,10 @@ def api_delete_instrument_layout(layout_id):
         is_active=True
     ).first_or_404()
     
+    # Delete thumbnail file if it exists
+    if layout.thumbnail_filename:
+        delete_thumbnail(layout.thumbnail_filename)
+    
     # Soft delete by setting is_active to False
     layout.is_active = False
     db.session.commit()
@@ -948,6 +1248,41 @@ def api_delete_instrument_layout(layout_id):
     return jsonify({
         'success': True,
         'message': 'Instrument layout deleted successfully'
+    })
+
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>/rename', methods=['POST'])
+@login_required
+def api_rename_instrument_layout(layout_id):
+    """Rename an instrument layout."""
+    layout = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    request_data = request.get_json()
+    new_title = request_data.get('title', '').strip()
+    
+    if not new_title:
+        return jsonify({
+            'success': False,
+            'message': 'Title cannot be empty'
+        }), 400
+    
+    if len(new_title) > 200:
+        return jsonify({
+            'success': False,
+            'message': 'Title cannot exceed 200 characters'
+        }), 400
+    
+    layout.title = new_title
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Instrument layout renamed successfully',
+        'new_title': new_title
     })
 
 
@@ -1023,3 +1358,11 @@ def events():
         event_types=Event.EVENT_BITS,
         stats=stats
     )
+
+
+@dashboard_bp.route('/thumbnails/instrument_layouts/<filename>')
+def serve_thumbnail(filename):
+    """Serve thumbnail images for instrument layouts."""
+    from flask import send_from_directory
+    thumbnails_dir = os.path.join(current_app.static_folder, 'thumbnails', 'instrument_layouts')
+    return send_from_directory(thumbnails_dir, filename)
