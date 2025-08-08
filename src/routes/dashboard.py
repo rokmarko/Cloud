@@ -13,6 +13,7 @@ from flask_login import login_required, current_user
 from src.app import db
 from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
 from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, LogbookEntryForm, InitialLogbookTimeForm
+from src.services.thingsboard_sync import ThingsBoardSyncService
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -1084,29 +1085,36 @@ def api_send_checklist(checklist_id):
         }), 403
     
     try:
-        # TODO: Implement actual sending mechanism here
-        # This could involve:
-        # 1. Saving to a device-specific checklist queue
-        # 2. Sending via API to external device
-        # 3. Creating a notification/sync record
-        # For now, we'll just log it
+        # Initialize ThingsBoard service
+        tb_service = ThingsBoardSyncService()
         
-        logging.info(f"Checklist '{checklist.title}' (ID: {checklist.id}) sent to device '{device.name}' (ID: {device.id}) by user {current_user.email}")
+        # Prepare checklist data for sending
+        checklist_data = {
+            'id': checklist.id,
+            'title': checklist.title,
+            'category': checklist.category,
+            'description': checklist.description or '',
+            'json_content': checklist.json_content or '',
+            'created_at': checklist.created_at.isoformat() if checklist.created_at else None,
+            'updated_at': checklist.updated_at.isoformat() if checklist.updated_at else None
+        }
         
-        # You could create a table to track sent checklists
-        # sent_checklist = SentChecklist(
-        #     checklist_id=checklist.id,
-        #     device_id=device.id,
-        #     sent_by_user_id=current_user.id,
-        #     sent_at=datetime.utcnow()
-        # )
-        # db.session.add(sent_checklist)
-        # db.session.commit()
+        # Send checklist via ThingsBoard RPC v2 API
+        success = tb_service.send_checklist_to_device(device.external_device_id, checklist_data)
         
-        return jsonify({
-            'success': True,
-            'message': f'Checklist "{checklist.title}" sent to {device.name} successfully!'
-        })
+        if success:
+            logging.info(f"Checklist '{checklist.title}' (ID: {checklist.id}) sent to device '{device.name}' (ID: {device.id}) via ThingsBoard RPC by user {current_user.email}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Checklist "{checklist.title}" sent to {device.name} successfully!'
+            })
+        else:
+            logging.error(f"Failed to send checklist '{checklist.title}' to device '{device.name}' via ThingsBoard RPC")
+            return jsonify({
+                'success': False,
+                'message': f'Failed to send checklist to {device.name}. Device may be offline or unreachable.'
+            }), 500
         
     except Exception as e:
         logging.error(f"Error sending checklist {checklist_id} to device {device_id}: {e}")

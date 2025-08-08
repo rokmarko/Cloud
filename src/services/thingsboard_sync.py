@@ -1351,6 +1351,73 @@ class ThingsBoardSyncService:
             logger.debug(f"Flight sequence data: {flight_sequence}")
             raise
 
+    def send_checklist_to_device(self, device_id: str, checklist_data: Dict[str, Any]) -> bool:
+        """
+        Send checklist to device via ThingsBoard RPC v2 API.
+        
+        Args:
+            device_id: ThingsBoard device ID
+            checklist_data: Dictionary containing checklist information
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not device_id:
+            logger.error("No device ID provided for checklist sending")
+            return False
+        
+        # Authenticate and get JWT token
+        jwt_token = self._authenticate()
+        if not jwt_token:
+            logger.error("Failed to authenticate with ThingsBoard for checklist sending")
+            return False
+        
+        url = f"{self.base_url}/api/rpc/twoway/{device_id}"
+        
+        payload = {
+            "method": "sendChecklist",
+            "params": checklist_data,
+            "persistent": True,  # Ensure the RPC call persists
+            "expirationTime": int((datetime.utcnow() + timedelta(days=3)).timestamp() * 1000)
+        }
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {jwt_token}',
+            'X-Authorization': f'Bearer {jwt_token}',
+            'User-Agent': 'KanardiaCloud/1.0'
+        }
+        
+        try:
+            logger.info(f"Sending checklist to device {device_id} via ThingsBoard RPC")
+            # ¸logger.debug(f"RPC payload: {json.dumps(payload, indent=2)}")
+            
+            response = requests.post(
+                url=url,
+                json=payload,
+                headers=headers,
+                timeout=self.timeout
+            )
+            
+            response.raise_for_status()
+            
+            # ThingsBoard RPC returns the response from the device
+            result = response.json()
+            logger.info(f"ThingsBoard RPC response for checklist sending: {result}")
+            
+            # Consider the operation successful if we get any response without error
+            return True
+            
+        except requests.RequestException as e:
+            logger.error(f"HTTP error sending checklist to device {device_id}: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response body: {e.response.text}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Unexpected error sending checklist to device {device_id}: {e}")
+            return False
+
 
 # Create singleton instance
 thingsboard_sync = ThingsBoardSyncService()

@@ -670,11 +670,32 @@ function sendChecklistToDevice() {
     transition: all 0.3s ease;
     border: none;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    position: relative;
+    z-index: 1;
 }
 
 .checklist-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    z-index: 2;
+}
+
+/* Fix dropdown z-index issue */
+.dropdown {
+    position: relative;
+}
+
+.dropdown.show {
+    z-index: 1050;
+}
+
+.dropdown-menu {
+    z-index: 1051;
+}
+
+/* Ensure the card with open dropdown is above others */
+.checklist-card:has(.dropdown.show) {
+    z-index: 1050;
 }
 
 .page-header {
