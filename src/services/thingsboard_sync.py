@@ -335,7 +335,7 @@ class ThingsBoardSyncService:
             logger.error("Failed to authenticate with ThingsBoard")
             return None
         
-        url = f"{self.base_url}/api/plugins/rpc/twoway/{device_id}"
+        url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
         payload = {
             "method": "syncLog",
@@ -743,11 +743,11 @@ class ThingsBoardSyncService:
             logger.error("Failed to authenticate with ThingsBoard")
             return None
         
-        url = f"{self.base_url}/api/plugins/rpc/twoway/{device_id}"
+        url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
         payload = {
             "method": "syncEvents",
-            "params": { "count": 2000, "last_event": last_event }
+            "params": { "count": 5000, "last_event": last_event }
         }
         
         headers = {
@@ -758,6 +758,7 @@ class ThingsBoardSyncService:
         }
         
         try:
+       
             logger.debug(f"Calling ThingsBoard events API for device {device_id}")
             
             response = requests.post(
@@ -770,6 +771,21 @@ class ThingsBoardSyncService:
             response.raise_for_status()
             
             data = response.json()
+
+            # If the response is a dict with a single key 'data', and the value is a string, try to decompress it
+            if isinstance(data, dict) and 'data' in data and isinstance(data['data'], str):
+                try:
+                    import base64
+                    import zlib
+                    compressed = base64.b64decode(data['data'])
+                    # qCompress adds a 4-byte Qt header, skip it
+                    decompressed = zlib.decompress(compressed[4:])
+                    # Try to decode as utf-8 and parse as JSON
+                    data = json.loads(decompressed.decode('utf-8'))
+                    logger.debug(f"Decompressed and loaded JSON data for device {device_id}")
+                except Exception as e:
+                    logger.error(f"Failed to decompress or decode ThingsBoard events data for device {device_id}: {str(e)}")
+                    return None
             
             logger.debug(f"Retrieved events data from ThingsBoard for device {device_id}")
             return data
