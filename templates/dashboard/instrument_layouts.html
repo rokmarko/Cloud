@@ -6,9 +6,14 @@
 
 <div class="page-header">
     <h1><span class="material-icons">dashboard</span> Instrument Layouts</h1>
-    <a href="{{ url_for('dashboard.add_instrument_layout') }}" class="btn btn-primary">
-        <span class="material-icons me-2">add_circle</span> Create Layout
-    </a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('dashboard.import_instrument_layout') }}" class="btn btn-outline-primary">
+            <span class="material-icons me-2">upload_file</span> Import Layout
+        </a>
+        <a href="{{ url_for('dashboard.add_instrument_layout') }}" class="btn btn-primary">
+            <span class="material-icons me-2">add_circle</span> Create Layout
+        </a>
+    </div>
 </div>
 
 <!-- Instrument Layout Editor Modal -->

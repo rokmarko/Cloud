@@ -12,7 +12,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from src.app import db
 from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
-from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, LogbookEntryForm, InitialLogbookTimeForm
+from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, InstrumentLayoutImportForm, LogbookEntryForm, InitialLogbookTimeForm
 from src.services.thingsboard_sync import ThingsBoardSyncService
 import json
 
@@ -622,6 +622,66 @@ def add_instrument_layout():
         return redirect(url_for('dashboard.instrument_layouts'))
     
     return render_template('dashboard/add_instrument_layout_simple.html', title='Add Instrument Layout', form=form)
+
+
+@dashboard_bp.route('/instrument-layouts/import', methods=['GET', 'POST'])
+@login_required
+def import_instrument_layout():
+    """Import instrument layout from file."""
+    form = InstrumentLayoutImportForm()
+    
+    if form.validate_on_submit():
+        file = form.file.data
+        
+        try:
+            # Read file content
+            file_content = file.read().decode('utf-8')
+            
+            # Extract filename without extension for title
+            filename = file.filename
+            title = filename
+            for ext in ['.xml', '.iml']:
+                if filename.lower().endswith(ext):
+                    title = filename[:-len(ext)]
+                    break
+            
+            # Determine instrument type from filename or content
+            instrument_type = 'digi'  # Default
+            filename_lower = filename.lower()
+            if 'indu' in filename_lower:
+                if '57' in filename_lower:
+                    instrument_type = 'indu_57mm'
+                elif '80' in filename_lower:
+                    instrument_type = 'indu_80mm'
+                else:
+                    instrument_type = 'indu_57mm'
+            elif 'altimeter' in filename_lower:
+                instrument_type = 'altimeter_80mm'
+            
+            # Create instrument layout with file content
+            layout = InstrumentLayout(
+                title=title,
+                description=f"Imported from {filename}",
+                category="custom",  # Default category for imports
+                instrument_type=instrument_type,
+                layout_data=json.dumps({}),  # Keep empty as we use xml_content
+                xml_content=file_content,  # Load content directly
+                user_id=current_user.id
+            )
+            
+            db.session.add(layout)
+            db.session.commit()
+            
+            flash(f'Instrument layout "{title}" imported successfully from {filename}!', 'success')
+            return redirect(url_for('dashboard.instrument_layouts'))
+            
+        except UnicodeDecodeError:
+            flash('Could not read the file. Please ensure it is a text-based file with UTF-8 encoding.', 'danger')
+        except Exception as e:
+            flash(f'Error importing instrument layout: {str(e)}', 'danger')
+            logging.error(f"Error importing instrument layout: {e}")
+    
+    return render_template('dashboard/import_instrument_layout.html', title='Import Instrument Layout', form=form)
 
 
 @dashboard_bp.route('/instrument-layouts/<int:layout_id>')

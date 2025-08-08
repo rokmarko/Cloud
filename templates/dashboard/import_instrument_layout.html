@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons">upload_file</span> Import Instrument Layout</h1>
+    <a href="{{ url_for('dashboard.instrument_layouts') }}" class="btn btn-secondary">
+        <span class="material-icons me-2">arrow_back</span> Back to Instrument Layouts
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <span class="material-icons me-2">dashboard</span>
+                    Import Instrument Layout File
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <span class="material-icons me-2">info</span>
+                    <strong>Select an instrument layout file to import.</strong><br>
+                    Supported formats: .xml and .iml files containing layout configuration data.
+                    The filename will be used as the layout title.
+                </div>
+
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-4">
+                        {{ form.file.label(class="form-label") }}
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <span class="material-icons">attach_file</span>
+                            </span>
+                            {{ form.file(class="form-control", accept=".xml,.iml") }}
+                        </div>
+                        {% if form.file.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.file.errors %}
+                                    <div>{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Supported file types: .xml, .iml. The instrument type will be automatically detected from the filename.
+                            <ul class="small mt-2 mb-0">
+                                <li>Files containing "indu" with "57" → Indu 57mm</li>
+                                <li>Files containing "indu" with "80" → Indu 80mm</li>
+                                <li>Files containing "altimeter" → Altimeter 80mm</li>
+                                <li>Default → Digi</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        {{ form.submit(class="btn btn-primary") }}
+                        <a href="{{ url_for('dashboard.instrument_layouts') }}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+</style>
+{% endblock %}

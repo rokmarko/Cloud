@@ -108,6 +108,15 @@ class ChecklistImportForm(FlaskForm):
     submit = SubmitField('Import Checklist')
 
 
+class InstrumentLayoutImportForm(FlaskForm):
+    """Instrument layout import form for layout files."""
+    file = FileField('Instrument Layout File (*.xml, *.iml)', validators=[
+        FileRequired('Please select a layout file to import'),
+        FileAllowed(['xml', 'iml'], 'Only .xml and .iml files are allowed')
+    ])
+    submit = SubmitField('Import Layout')
+
+
 class InstrumentLayoutForm(FlaskForm):
     """Instrument layout form."""
     title = StringField('Title', validators=[DataRequired(), Length(max=200)])
