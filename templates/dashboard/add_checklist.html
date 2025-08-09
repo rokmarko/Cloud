@@ -26,16 +26,6 @@
                     </div>
                     
                     <div class="mb-3">
-                        {{ form.category.label(class="form-label") }}
-                        {{ form.category(class="form-select" + (" is-invalid" if form.category.errors else "")) }}
-                        {% if form.category.errors %}
-                            <div class="invalid-feedback">
-                                {% for error in form.category.errors %}{{ error }}{% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="mb-3">
                         {{ form.description.label(class="form-label") }}
                         {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), rows="3") }}
                         {% if form.description.errors %}

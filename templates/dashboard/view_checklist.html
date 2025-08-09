@@ -66,9 +66,6 @@
                     <span class="material-icons me-2">checklist</span>
                     {{ checklist.title }}
                 </h5>
-                <span class="badge" style="background: var(--kanardia-red); color: white;">
-                    {{ checklist.category.title() }}
-                </span>
             </div>
             <div class="card-body">
                 {% if checklist.description %}
@@ -124,13 +121,6 @@
             </div>
             <div class="card-body">
                 <dl class="row">
-                    <dt class="col-sm-4">Category:</dt>
-                    <dd class="col-sm-8">
-                        <span class="badge" style="background: var(--kanardia-red); color: white;">
-                            {{ checklist.category.title() }}
-                        </span>
-                    </dd>
-                    
                     <dt class="col-sm-4">Items:</dt>
                     <dd class="col-sm-8">{{ items|length if items else 0 }}</dd>
                     

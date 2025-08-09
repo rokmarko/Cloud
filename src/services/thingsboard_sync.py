@@ -14,7 +14,7 @@ from flask import current_app
 
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.DEBUG)
 
 class ThingsBoardSyncService:
     """Service for syncing logbook entries from ThingsBoard server."""
@@ -150,6 +150,7 @@ class ThingsBoardSyncService:
             'new_events': 0,
             'total_events': 0,
             'new_logbook_entries': 0,
+            'telemetry_updated': 0,
             'errors': []
         }
         
@@ -165,6 +166,11 @@ class ThingsBoardSyncService:
             
             for device in devices:
                 try:
+                    # Sync telemetry data
+                    telemetry_updated = self._sync_device_telemetry(device)
+                    if telemetry_updated:
+                        results['telemetry_updated'] += 1
+                    
                     # Sync logbook entries
                     # device_result = self.sync_device(device)
                     
@@ -189,7 +195,8 @@ class ThingsBoardSyncService:
             
             logger.info(f"Sync completed: {results['synced_devices']}/{results['total_devices']} devices, "
                        f"{results['new_entries']} new entries, {results['new_events']} new events, "
-                       f"{results['new_logbook_entries']} new logbook entries")
+                       f"{results['new_logbook_entries']} new logbook entries, "
+                       f"{results['telemetry_updated']} devices with telemetry updated")
             
         except Exception as e:
             error_msg = f"Fatal error during sync: {str(e)}"
@@ -240,7 +247,9 @@ class ThingsBoardSyncService:
             response.raise_for_status()
             
             data = response.json()
-            
+
+            logger.debug(f"Device {device_id} telemetry response: {json.dumps(data, indent=2)}")
+
             # Check if 'active' attribute exists and is true
             if isinstance(data, list) and len(data) > 0:
                 active_attr = data[0]
@@ -261,6 +270,135 @@ class ThingsBoardSyncService:
             return False
         except Exception as e:
             logger.error(f"Unexpected error checking device activity for {device_id}: {str(e)}")
+            return False
+    
+    def _get_device_telemetry(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get latest telemetry data for a device from ThingsBoard.
+        
+        Args:
+            device_id: External device ID in ThingsBoard
+            
+        Returns:
+            Dictionary with telemetry data or None if error
+        """
+        # Authenticate and get JWT token
+        jwt_token = self._authenticate()
+        if not jwt_token:
+            logger.error("Failed to authenticate with ThingsBoard for telemetry request")
+            return None
+        
+        # ThingsBoard telemetry API endpoint with keys in URL
+        keys = 'fuel,status,altitude,latitude,longitude,speed'
+        url = f"{self.base_url}/api/plugins/telemetry/DEVICE/{device_id}/values/timeseries?keys={keys}&useStrictDataTypes=false"
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {jwt_token}',
+            'X-Authorization': f'Bearer {jwt_token}',
+            'User-Agent': 'KanardiaCloud/1.0'
+        }
+        
+        try:
+            logger.debug(f"Requesting telemetry data for device {device_id}")
+            
+            response = requests.get(
+                url=url,
+                headers=headers,
+                timeout=self.timeout
+            )
+            
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            logger.debug(f"Device {device_id} telemetry response: {json.dumps(data, indent=2)}")
+            
+            # Parse telemetry data from response
+            telemetry = {}
+            telemetry_timestamps = {}
+            
+            if isinstance(data, dict):
+                for key, values in data.items():
+                    if isinstance(values, list) and len(values) > 0:
+                        # Get the latest value (first in list is most recent)
+                        latest_value = values[0]
+                        if isinstance(latest_value, dict):
+                            if 'value' in latest_value:
+                                telemetry[key] = latest_value['value']
+                            # Extract timestamp if available
+                            if 'ts' in latest_value:
+                                try:
+                                    # Ensure timestamp is numeric
+                                    ts_value = latest_value['ts']
+                                    if isinstance(ts_value, str):
+                                        ts_value = float(ts_value)
+                                    elif isinstance(ts_value, int):
+                                        ts_value = float(ts_value)
+                                    telemetry_timestamps[key] = ts_value
+                                except (ValueError, TypeError) as e:
+                                    logger.warning(f"Invalid timestamp format for key {key}: {latest_value['ts']}")
+                        else:
+                            # Handle case where value is directly in the array
+                            telemetry[key] = latest_value
+            
+            # Add timestamp information to telemetry data
+            if telemetry_timestamps:
+                try:
+                    # Find the most recent timestamp among all telemetry values
+                    latest_ts = max(telemetry_timestamps.values())
+                    telemetry['_timestamp'] = latest_ts
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Could not determine latest timestamp: {e}")
+                    # Don't add timestamp if we can't determine it
+            
+            logger.debug(f"Parsed telemetry for device {device_id}: {telemetry}")
+            return telemetry if telemetry else None
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"HTTP error getting telemetry for {device_id}: {str(e)}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON response getting telemetry for {device_id}: {str(e)}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting telemetry for {device_id}: {str(e)}")
+            return None
+    
+    def _sync_device_telemetry(self, device: Device) -> bool:
+        """
+        Sync telemetry data for a specific device.
+        
+        Args:
+            device: Device model instance with external_device_id
+            
+        Returns:
+            True if telemetry was updated, False otherwise
+        """
+        try:
+            # Get telemetry data from ThingsBoard
+            telemetry_data = self._get_device_telemetry(device.external_device_id)
+            
+            if not telemetry_data:
+                logger.debug(f"No telemetry data available for device {device.name}")
+                return False
+            
+            # Update device with telemetry data
+            device.update_telemetry(telemetry_data)
+            
+            # Commit changes
+            db.session.commit()
+            
+            logger.debug(f"Updated telemetry for device {device.name}: "
+                        f"status={device.status_description}, "
+                        f"fuel={device.fuel_quantity}, "
+                        f"location={device.location_description}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to sync telemetry for device {device.name}: {str(e)}")
+            db.session.rollback()
             return False
     
     def sync_device(self, device: Device) -> Dict[str, Any]:

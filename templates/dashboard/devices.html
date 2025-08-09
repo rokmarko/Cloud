@@ -4,6 +4,17 @@
 <!-- CSRF token for AJAX requests -->
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
+<style>
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2"><i class="bi bi-cpu"></i> My Devices</h1>
     <div class="btn-toolbar mb-2 mb-md-0">
@@ -39,6 +50,13 @@
                                 <li><a class="dropdown-item" href="{{ url_for('dashboard.edit_device', device_id=device.id) }}">
                                     <i class="bi bi-pencil"></i> Edit
                                 </a></li>
+                                {% if device.external_device_id %}
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="syncTelemetry({{ device.id }})">
+                                        <i class="bi bi-broadcast"></i> Sync Telemetry
+                                    </a>
+                                </li>
+                                {% endif %}
                                 <li>
                                     <a class="dropdown-item" href="#" onclick="duplicateDevice({{ device.id }})">
                                         <i class="bi bi-files"></i> Duplicate
@@ -65,6 +83,87 @@
                     {% endif %}
                     {% if device.registration %}
                         <p class="card-text"><strong>Registration:</strong> {{ device.registration }}</p>
+                    {% endif %}
+                    
+                    <!-- Telemetry Information -->
+                    {% if device.last_telemetry_update %}
+                        <div class="mt-3 pt-3 border-top">
+                            <h6 class="text-info mb-2">
+                                <i class="bi bi-broadcast"></i> Telemetry Data
+                                {% set age = device.get_telemetry_age() %}
+                                <span class="badge ms-2 
+                                    {% if 'Just now' in age or 'minute' in age %}bg-success
+                                    {% elif 'hour' in age %}bg-warning
+                                    {% elif 'day' in age %}bg-secondary
+                                    {% else %}bg-dark
+                                    {% endif %}" 
+                                    title="{{ device.get_telemetry_timestamp() }}">
+                                    {% if 'Just now' in age or 'minute' in age %}
+                                        <i class="bi bi-wifi"></i>
+                                    {% elif 'hour' in age %}
+                                        <i class="bi bi-clock"></i>
+                                    {% else %}
+                                        <i class="bi bi-clock-history"></i>
+                                    {% endif %}
+                                    {{ age }}
+                                </span>
+                            </h6>
+                            <div class="row">
+                                {% if device.status_description %}
+                                <div class="col-12 mb-2">
+                                    <span class="badge 
+                                        {% if device.status_description == 'Airborne' %}bg-warning
+                                        {% elif device.status_description == 'Engine Running' %}bg-info
+                                        {% elif device.status_description == 'Parked' %}bg-secondary
+                                        {% else %}bg-light text-dark
+                                        {% endif %}">
+                                        {% if device.status_description == 'Airborne' %}
+                                            <i class="bi bi-airplane"></i>
+                                        {% elif device.status_description == 'Engine Running' %}
+                                            <i class="bi bi-gear"></i>
+                                        {% elif device.status_description == 'Parked' %}
+                                            <i class="bi bi-pause-circle"></i>
+                                        {% endif %}
+                                        {{ device.status_description }}
+                                    </span>
+                                </div>
+                                {% endif %}
+                                {% if device.fuel_quantity is not none %}
+                                <div class="col-6">
+                                    <small class="text-muted">
+                                        <i class="bi bi-fuel-pump"></i> Fuel: {{ "%.1f"|format(device.fuel_quantity) }} L
+                                    </small>
+                                </div>
+                                {% endif %}
+                                {% if device.location_description %}
+                                <div class="col-6">
+                                    <small class="text-muted">
+                                        <i class="bi bi-geo-alt"></i> {{ device.location_description }}
+                                    </small>
+                                </div>
+                                {% endif %}
+                                {% if device.altitude is not none %}
+                                <div class="col-6 mt-1">
+                                    <small class="text-muted">
+                                        <i class="bi bi-arrow-up"></i> {{ "%.0f"|format(device.altitude) }} ft
+                                    </small>
+                                </div>
+                                {% endif %}
+                                {% if device.speed is not none %}
+                                <div class="col-6 mt-1">
+                                    <small class="text-muted">
+                                        <i class="bi bi-speedometer2"></i> {{ "%.0f"|format(device.speed) }} kt
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% elif device.external_device_id %}
+                        <div class="mt-3 pt-3 border-top">
+                            <small class="text-muted">
+                                <i class="bi bi-broadcast"></i> No telemetry data available
+                            </small>
+                        </div>
                     {% endif %}
                     
                     <!-- Logbook Stats -->
@@ -170,6 +269,50 @@ function deleteDeviceAPI(deviceId) {
             alert('Error deleting device. Please try again.');
         });
     }
+}
+
+function syncTelemetry(deviceId) {
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Show loading indicator (you can enhance this with a better UI)
+    const button = event.target.closest('a');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Syncing...';
+    button.style.pointerEvents = 'none';
+    
+    fetch(`/api/device/${deviceId}/sync-telemetry`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            alert('Telemetry synced successfully!');
+            // Reload page to show updated telemetry
+            location.reload();
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error syncing telemetry:', error);
+        alert('Error syncing telemetry. Please try again.');
+    })
+    .finally(() => {
+        // Restore button
+        button.innerHTML = originalText;
+        button.style.pointerEvents = 'auto';
+    });
 }
 </script>
 

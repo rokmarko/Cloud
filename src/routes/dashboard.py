@@ -385,6 +385,63 @@ def api_duplicate_device(device_id):
     })
 
 
+@dashboard_bp.route('/api/device/<int:device_id>/sync-telemetry', methods=['POST'])
+@login_required
+def api_sync_device_telemetry(device_id):
+    """Manually sync telemetry data for a specific device."""
+    device = Device.query.filter_by(
+        id=device_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    if not device.external_device_id:
+        return jsonify({
+            'success': False,
+            'error': 'Device has no external device ID configured for telemetry sync'
+        }), 400
+    
+    try:
+        # Initialize ThingsBoard service
+        tb_service = ThingsBoardSyncService()
+        
+        # Sync telemetry for this device
+        success = tb_service._sync_device_telemetry(device)
+        
+        if success:
+            # Return updated telemetry data
+            return jsonify({
+                'success': True,
+                'message': 'Telemetry synced successfully',
+                'telemetry': {
+                    'status': device.status,
+                    'status_description': device.status_description,
+                    'fuel_quantity': device.fuel_quantity,
+                    'altitude': device.altitude,
+                    'latitude': device.latitude,
+                    'longitude': device.longitude,
+                    'speed': device.speed,
+                    'location_description': device.location_description,
+                    'last_update': device.last_telemetry_update.isoformat() if device.last_telemetry_update else None
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to sync telemetry data from ThingsBoard'
+            }), 500
+            
+    except Exception as e:
+        logging.error(f"Error syncing telemetry for device {device.name}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Error syncing telemetry: {str(e)}'
+        }), 500
+
+
+# Checklist routes
+
+
 @dashboard_bp.route('/checklists')
 @login_required
 def checklists():
@@ -439,7 +496,6 @@ def add_checklist():
         checklist = Checklist(
             title=form.title.data,
             description="",
-            category="other",
             items=json.dumps([]),  # Empty items for now
             json_content=json.dumps(default_template),
             user_id=current_user.id
@@ -476,7 +532,6 @@ def import_checklist():
             checklist = Checklist(
                 title=title,
                 description=f"Imported from {filename}",
-                category="other",  # Default category
                 items=json.dumps([]),  # Keep empty as we use json_content
                 json_content=file_content,  # Load content directly
                 user_id=current_user.id
@@ -610,7 +665,6 @@ def add_instrument_layout():
         layout = InstrumentLayout(
             title=form.title.data,
             description="",
-            category="primary",
             instrument_type=form.instrument_type.data,
             layout_data=json.dumps([]),  # Empty data for now
             xml_content=xml_content,
@@ -662,7 +716,6 @@ def import_instrument_layout():
             layout = InstrumentLayout(
                 title=title,
                 description=f"Imported from {filename}",
-                category="custom",  # Default category for imports
                 instrument_type=instrument_type,
                 layout_data=json.dumps({}),  # Keep empty as we use xml_content
                 xml_content=file_content,  # Load content directly
@@ -930,7 +983,6 @@ def api_get_checklist(checklist_id):
     return jsonify({
         'id': checklist.id,
         'title': checklist.title,
-        'category': checklist.category,
         'description': checklist.description,
         'data': data
     })
@@ -954,8 +1006,6 @@ def api_update_checklist(checklist_id):
         checklist.title = request_data['title']
     if 'description' in request_data:
         checklist.description = request_data['description']
-    if 'category' in request_data:
-        checklist.category = request_data['category']
     # if 'data' in request_data:
         # checklist.items = json.dumps(request_data['data'])
     # Handle json_content updates (for checklist editor)
@@ -988,7 +1038,6 @@ def api_duplicate_checklist(checklist_id):
     # Create a copy
     duplicate = Checklist(
         title=f"{original.title} (Copy)",
-        category=original.category,
         description=original.description,
         items=original.items,
         user_id=current_user.id
@@ -1152,7 +1201,6 @@ def api_send_checklist(checklist_id):
         checklist_data = {
             'id': checklist.id,
             'title': checklist.title,
-            'category': checklist.category,
             'description': checklist.description or '',
             'json_content': checklist.json_content or '',
             'created_at': checklist.created_at.isoformat() if checklist.created_at else None,
@@ -1205,7 +1253,6 @@ def api_get_instrument_layout(layout_id):
     return jsonify({
         'id': layout.id,
         'title': layout.title,
-        'category': layout.category,
         'description': layout.description,
         'data': data
     })
@@ -1228,8 +1275,6 @@ def api_update_instrument_layout(layout_id):
         layout.title = request_data['title']
     if 'description' in request_data:
         layout.description = request_data['description']
-    if 'category' in request_data:
-        layout.category = request_data['category']
     if 'data' in request_data:
         layout.layout_data = json.dumps(request_data['data'])
     # Handle xml_content updates (for instrument layout editor)
@@ -1277,7 +1322,6 @@ def api_duplicate_instrument_layout(layout_id):
     # Create a copy
     duplicate = InstrumentLayout(
         title=f"{original.title} (Copy)",
-        category=original.category,
         instrument_type=original.instrument_type,
         description=original.description,
         layout_data=original.layout_data,
@@ -1352,6 +1396,58 @@ def api_rename_instrument_layout(layout_id):
         'message': 'Instrument layout renamed successfully',
         'new_title': new_title
     })
+
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>/thumbnail', methods=['PUT'])
+@login_required
+def api_update_instrument_layout_thumbnail(layout_id):
+    """Update instrument layout thumbnail from editor export."""
+    layout = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    request_data = request.get_json()
+    thumbnail_data = request_data.get('thumbnail')
+    
+    if not thumbnail_data:
+        return jsonify({
+            'success': False,
+            'message': 'No thumbnail data provided'
+        }), 400
+    
+    try:
+        # Delete old thumbnail if it exists
+        if layout.thumbnail_filename:
+            delete_thumbnail(layout.thumbnail_filename)
+        
+        # Generate new thumbnail from editor export
+        # The data comes as "png,base64data" format
+        new_thumbnail = generate_thumbnail_from_base64(thumbnail_data, layout_id)
+        
+        if new_thumbnail:
+            layout.thumbnail_filename = new_thumbnail
+            db.session.commit()
+            
+            logging.info(f"Updated thumbnail {new_thumbnail} for layout {layout_id}")
+            return jsonify({
+                'success': True,
+                'message': 'Thumbnail updated successfully',
+                'thumbnail_filename': new_thumbnail
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to generate thumbnail'
+            }), 500
+            
+    except Exception as e:
+        logging.error(f"Error updating thumbnail for layout {layout_id}: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Error updating thumbnail'
+        }), 500
 
 
 @dashboard_bp.route('/events')

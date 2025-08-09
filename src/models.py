@@ -82,11 +82,204 @@ class Device(db.Model):
     external_device_id = db.Column(db.String(100))  # ThingsBoard device ID for sync
     current_logger_page = db.Column(db.BigInteger, nullable=True)  # Current page of device logger
     is_active = db.Column(db.Boolean, default=True)
+    
+    # Telemetry fields
+    last_telemetry_update = db.Column(db.DateTime, nullable=True)  # When telemetry was last updated
+    fuel_quantity = db.Column(db.Float, nullable=True)  # Current fuel quantity
+    status = db.Column(db.String(20), nullable=True)  # Raw status from telemetry
+    status_description = db.Column(db.String(50), nullable=True)  # Human-readable status
+    altitude = db.Column(db.Float, nullable=True)  # Current altitude
+    latitude = db.Column(db.Float, nullable=True)  # Current latitude
+    longitude = db.Column(db.Float, nullable=True)  # Current longitude
+    speed = db.Column(db.Float, nullable=True)  # Current speed
+    location_description = db.Column(db.String(200), nullable=True)  # Human-readable location
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Foreign keys
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    def get_status_description(self, status_value: str) -> str:
+        """
+        Convert raw status value to human-readable description.
+        
+        Args:
+            status_value: Raw status value from telemetry
+            
+        Returns:
+            Human-readable status description
+        """
+        if not status_value:
+            return 'Unknown'
+        
+        status_map = {
+            '0': 'Parked',
+            '1': 'Engine Running',
+            '2': 'Airborne',
+            'parked': 'Parked',
+            'engine_running': 'Engine Running',
+            'airborne': 'Airborne'
+        }
+        
+        return status_map.get(str(status_value).lower(), f'Status {status_value}')
+    
+    def update_telemetry(self, telemetry_data: dict) -> None:
+        """
+        Update device telemetry data from ThingsBoard response.
+        
+        Args:
+            telemetry_data: Dictionary with telemetry values
+        """
+        from datetime import datetime
+        
+        # Update telemetry fields if present in data
+        if 'fuel' in telemetry_data:
+            try:
+                self.fuel_quantity = float(telemetry_data['fuel']) if telemetry_data['fuel'] is not None else None
+            except (ValueError, TypeError):
+                self.fuel_quantity = None
+        
+        if 'status' in telemetry_data:
+            self.status = str(telemetry_data['status'])
+            self.status_description = self.get_status_description(self.status)
+        
+        if 'altitude' in telemetry_data:
+            try:
+                self.altitude = float(telemetry_data['altitude']) if telemetry_data['altitude'] is not None else None
+            except (ValueError, TypeError):
+                self.altitude = None
+        
+        if 'latitude' in telemetry_data:
+            try:
+                self.latitude = float(telemetry_data['latitude']) if telemetry_data['latitude'] is not None else None
+            except (ValueError, TypeError):
+                self.latitude = None
+        
+        if 'longitude' in telemetry_data:
+            try:
+                self.longitude = float(telemetry_data['longitude']) if telemetry_data['longitude'] is not None else None
+            except (ValueError, TypeError):
+                self.longitude = None
+        
+        if 'speed' in telemetry_data:
+            try:
+                self.speed = float(telemetry_data['speed']) if telemetry_data['speed'] is not None else None
+            except (ValueError, TypeError):
+                self.speed = None
+        
+        # Update location description if we have coordinates
+        if self.latitude is not None and self.longitude is not None:
+            self.location_description = self._get_location_description(self.latitude, self.longitude)
+        
+        # Update timestamp - use telemetry timestamp if available, otherwise current time
+        if '_timestamp' in telemetry_data:
+            try:
+                # Convert milliseconds timestamp to datetime
+                import datetime as dt
+                ts_value = telemetry_data['_timestamp']
+                
+                # Ensure timestamp is numeric
+                if isinstance(ts_value, str):
+                    ts_value = float(ts_value)
+                elif isinstance(ts_value, int):
+                    ts_value = float(ts_value)
+                
+                # Convert from milliseconds to seconds for datetime.fromtimestamp
+                telemetry_timestamp = dt.datetime.fromtimestamp(ts_value / 1000)
+                self.last_telemetry_update = telemetry_timestamp
+            except (ValueError, TypeError, OSError) as e:
+                # If timestamp conversion fails, use current time
+                from flask import current_app
+                if current_app:
+                    current_app.logger.warning(f"Invalid telemetry timestamp {telemetry_data.get('_timestamp')}: {e}")
+                self.last_telemetry_update = datetime.utcnow()
+        else:
+            self.last_telemetry_update = datetime.utcnow()
+            
+        self.updated_at = datetime.utcnow()
+    
+    def _get_location_description(self, lat: float, lon: float) -> str:
+        """
+        Get human-readable location description from coordinates using hybrid geocoding.
+        
+        Args:
+            lat: Latitude
+            lon: Longitude
+            
+        Returns:
+            Location description from hybrid geocoding service
+        """
+        try:
+            from .services.geocoding import reverse_geocode
+            return reverse_geocode(lat, lon)
+        except ImportError as e:
+            # Fallback to basic coordinate display if geocoding service unavailable
+            return f"{lat:.4f}°, {lon:.4f}°"
+        except Exception as e:
+            # Log error and provide fallback
+            from flask import current_app
+            if current_app:
+                current_app.logger.warning(f"Geocoding failed for {lat}, {lon}: {e}")
+            return f"{lat:.4f}°, {lon:.4f}°"
+    
+    def has_recent_telemetry(self, max_age_minutes: int = 30) -> bool:
+        """
+        Check if device has recent telemetry data.
+        
+        Args:
+            max_age_minutes: Maximum age of telemetry in minutes
+            
+        Returns:
+            True if telemetry is recent, False otherwise
+        """
+        if not self.last_telemetry_update:
+            return False
+        
+        from datetime import datetime, timedelta
+        threshold = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+        return self.last_telemetry_update > threshold
+    
+    def get_telemetry_age(self) -> str:
+        """
+        Get human-readable age of telemetry data.
+        
+        Returns:
+            String describing how old the telemetry data is
+        """
+        if not self.last_telemetry_update:
+            return "No data"
+        
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        age = now - self.last_telemetry_update
+        
+        if age.total_seconds() < 60:
+            return "Just now"
+        elif age.total_seconds() < 3600:  # Less than 1 hour
+            minutes = int(age.total_seconds() / 60)
+            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+        elif age.total_seconds() < 86400:  # Less than 1 day
+            hours = int(age.total_seconds() / 3600)
+            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        elif age.total_seconds() < 2592000:  # Less than 30 days
+            days = int(age.total_seconds() / 86400)
+            return f"{days} day{'s' if days != 1 else ''} ago"
+        else:
+            # For older data, show the actual date
+            return self.last_telemetry_update.strftime("%Y-%m-%d %H:%M")
+    
+    def get_telemetry_timestamp(self) -> str:
+        """
+        Get formatted timestamp of last telemetry update.
+        
+        Returns:
+            Formatted timestamp string
+        """
+        if not self.last_telemetry_update:
+            return "Never"
+        
+        return self.last_telemetry_update.strftime("%Y-%m-%d %H:%M:%S UTC")
     
     def __repr__(self):
         return f'<Device {self.name}>'
@@ -127,7 +320,6 @@ class Checklist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    category = db.Column(db.String(50), nullable=False)  # preflight, takeoff, landing, emergency
     items = db.Column(db.Text, nullable=False)  # JSON string of checklist items
     json_content = db.Column(db.Text, nullable=False)  # Full JSON content of the checklist
     is_active = db.Column(db.Boolean, default=True)
@@ -164,7 +356,6 @@ class InstrumentLayout(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    category = db.Column(db.String(50), nullable=False)  # primary, secondary, backup, custom
     instrument_type = db.Column(db.String(50), nullable=False)  # digi, indu_57mm, indu_80mm, altimeter_80mm
     layout_data = db.Column(db.Text, nullable=False)  # JSON string of layout configuration
     xml_content = db.Column(db.Text, nullable=False)  # Full XML content of the layout

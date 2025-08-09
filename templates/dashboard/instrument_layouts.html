@@ -67,7 +67,7 @@
                     <img src="{{ url_for('dashboard.serve_thumbnail', filename=layout.thumbnail_filename) }}" 
                          class="card-img-top layout-thumbnail" 
                          alt="{{ layout.title }} thumbnail"
-                         style="height: 200px; object-fit: cover;">
+                         style="height: 200px; object-fit: contain; background-color: #f8f9fa;">
                 {% else %}
                     <div class="card-img-top layout-placeholder d-flex align-items-center justify-content-center" 
                          style="height: 200px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
@@ -80,10 +80,7 @@
                         {{ layout.title }}
                     </h5>
                     <h6 class="card-subtitle mb-3">
-                        <span class="badge" style="background: var(--kanardia-red); color: white;">
-                            {{ layout.category.title() }}
-                        </span>
-                        <span class="badge ms-2" style="background: var(--kanardia-orange); color: white;">
+                        <span class="badge" style="background: var(--kanardia-orange); color: white;">
                             {% if layout.instrument_type == 'digi' %}Digi
                             {% elif layout.instrument_type == 'indu_57mm' %}Indu 57mm
                             {% elif layout.instrument_type == 'indu_80mm' %}Indu 80mm
@@ -216,7 +213,14 @@ function openInstrumentLayoutEditor(layoutId, layoutTitle) {
     // Handle modal close event to cleanup
     const modalElement = document.getElementById('instrumentLayoutEditorModal');
     modalElement.addEventListener('hidden.bs.modal', function onModalHidden() {
-        cleanupEditor();
+        // First, try to get thumbnail from editor before cleanup
+        if (isEditorLoaded && currentLayoutId) {
+            exportThumbnailFromEditor(() => {
+                cleanupEditor();
+            });
+        } else {
+            cleanupEditor();
+        }
         modalElement.removeEventListener('hidden.bs.modal', onModalHidden);
     });
 }
@@ -241,6 +245,177 @@ function hideLoadingIndicator() {
     
     if (loadingElement) loadingElement.style.display = 'none';
     if (iframe) iframe.style.display = 'block';
+}
+
+/**
+ * Export thumbnail from editor before closing
+ * @param {Function} callback - Callback function to execute after export
+ */
+function exportThumbnailFromEditor(callback) {
+    const iframe = document.getElementById('instrumentLayoutEditor');
+    
+    if (!iframe || !iframe.contentWindow) {
+        callback();
+        return;
+    }
+    
+    // Set up timeout to avoid hanging if editor doesn't respond
+    const timeout = setTimeout(() => {
+        console.warn('Thumbnail export timeout - proceeding with cleanup');
+        window.removeEventListener('message', handleExportResponse);
+        callback();
+    }, 3000); // 3 second timeout
+    
+    // Listen for export response
+    function handleExportResponse(event) {
+        if (event.origin !== 'https://www.kanardia.eu') return;
+        
+        try {
+            let payload;
+            if (typeof event.data === 'string') {
+                payload = JSON.parse(event.data);
+            } else {
+                payload = event.data;
+            }
+            
+            if (payload.event === 'export' && payload.data) {
+                clearTimeout(timeout);
+                window.removeEventListener('message', handleExportResponse);
+                
+                // Save thumbnail to backend
+                saveThumbnailToBackend(payload.data, callback);
+            }
+        } catch (error) {
+            console.error('Error parsing export response:', error);
+            clearTimeout(timeout);
+            window.removeEventListener('message', handleExportResponse);
+            callback();
+        }
+    }
+    
+    window.addEventListener('message', handleExportResponse);
+    
+    // Request export from iframe
+    try {
+        iframe.contentWindow.postMessage(JSON.stringify({
+            action: 'export'
+        }), 'https://www.kanardia.eu');
+    } catch (error) {
+        console.error('Error sending export message:', error);
+        clearTimeout(timeout);
+        window.removeEventListener('message', handleExportResponse);
+        callback();
+    }
+}
+
+/**
+ * Save thumbnail data to backend
+ * @param {string} thumbnailData - Base64 encoded PNG data with "png," prefix
+ * @param {Function} callback - Callback function to execute after save
+ */
+function saveThumbnailToBackend(thumbnailData, callback) {
+    if (!currentLayoutId) {
+        callback();
+        return;
+    }
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Save thumbnail to backend
+    fetch(`/dashboard/api/instrument-layout/${currentLayoutId}/thumbnail`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            thumbnail: thumbnailData
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(result => {
+        console.log('Thumbnail saved successfully:', result);
+        
+        // Refresh the specific layout card instead of reloading the entire page
+        if (result.thumbnail_filename) {
+            refreshLayoutCard(currentLayoutId, result.thumbnail_filename);
+        }
+        
+        callback();
+    })
+    .catch(error => {
+        console.error('Error saving thumbnail:', error);
+        callback(); // Still proceed with cleanup even if thumbnail save fails
+    });
+}
+
+/**
+ * Refresh a specific layout card with new thumbnail
+ * @param {number} layoutId - The ID of the layout to refresh
+ * @param {string} thumbnailFilename - The new thumbnail filename
+ */
+function refreshLayoutCard(layoutId, thumbnailFilename) {
+    // Find the layout card by looking for the edit button with the layout ID
+    const editButton = document.querySelector(`button[onclick*="openInstrumentLayoutEditor(${layoutId}"]`);
+    if (!editButton) {
+        console.warn(`Could not find layout card for ID ${layoutId}`);
+        return;
+    }
+    
+    // Navigate up to find the card element
+    const card = editButton.closest('.card');
+    if (!card) {
+        console.warn(`Could not find card element for layout ${layoutId}`);
+        return;
+    }
+    
+    // Find the thumbnail/placeholder element
+    const thumbnailElement = card.querySelector('.card-img-top');
+    if (!thumbnailElement) {
+        console.warn(`Could not find thumbnail element for layout ${layoutId}`);
+        return;
+    }
+    
+    // Create new thumbnail URL
+    const thumbnailUrl = `/dashboard/thumbnails/instrument_layouts/${thumbnailFilename}`;
+    
+    // Replace placeholder with actual thumbnail or update existing thumbnail
+    if (thumbnailElement.classList.contains('layout-placeholder')) {
+        // Replace placeholder div with img element
+        const newImg = document.createElement('img');
+        newImg.src = thumbnailUrl;
+        newImg.className = 'card-img-top layout-thumbnail';
+        newImg.alt = 'Layout thumbnail';
+        newImg.style.cssText = 'height: 200px; object-fit: contain; background-color: #f8f9fa;';
+        
+        // Add fade-in effect
+        newImg.style.opacity = '0';
+        thumbnailElement.parentNode.replaceChild(newImg, thumbnailElement);
+        
+        // Fade in the new thumbnail
+        setTimeout(() => {
+            newImg.style.transition = 'opacity 0.3s ease';
+            newImg.style.opacity = '1';
+        }, 50);
+    } else if (thumbnailElement.tagName === 'IMG') {
+        // Update existing image with cache-busting timestamp
+        const cacheBuster = Date.now();
+        thumbnailElement.style.transition = 'opacity 0.3s ease';
+        thumbnailElement.style.opacity = '0.5';
+        
+        setTimeout(() => {
+            thumbnailElement.src = `${thumbnailUrl}?v=${cacheBuster}`;
+            thumbnailElement.style.opacity = '1';
+        }, 150);
+    }
+    
+    console.log(`Refreshed layout card ${layoutId} with new thumbnail: ${thumbnailFilename}`);
 }
 
 /**
@@ -532,6 +707,10 @@ function renameInstrumentLayout(layoutId) {
 
 .layout-thumbnail {
     transition: transform 0.3s ease;
+    height: 200px;
+    object-fit: contain;
+    background-color: #f8f9fa;
+    width: 100%;
 }
 
 .layout-card:hover .layout-thumbnail {

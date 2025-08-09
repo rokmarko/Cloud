@@ -82,13 +82,6 @@ class ChecklistForm(FlaskForm):
     """Checklist form."""
     title = StringField('Title', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description')
-    category = SelectField('Category', choices=[
-        ('preflight', 'Preflight'),
-        ('takeoff', 'Takeoff'),
-        ('landing', 'Landing'),
-        ('emergency', 'Emergency'),
-        ('other', 'Other')
-    ], validators=[DataRequired()])
     items = TextAreaField('Checklist Items (one per line)', validators=[DataRequired()])
     submit = SubmitField('Save Checklist')
 
@@ -121,13 +114,6 @@ class InstrumentLayoutForm(FlaskForm):
     """Instrument layout form."""
     title = StringField('Title', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description')
-    category = SelectField('Category', choices=[
-        ('primary', 'Primary Display'),
-        ('secondary', 'Secondary Display'),
-        ('backup', 'Backup Instruments'),
-        ('custom', 'Custom Layout'),
-        ('other', 'Other')
-    ], validators=[DataRequired()])
     submit = SubmitField('Save Layout')
 
 
