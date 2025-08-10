@@ -4,6 +4,80 @@
 <!-- CSRF token for AJAX requests -->
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
+<!-- Custom CSS for dropdown fix -->
+<style>
+    /* Fix dropdown clipping in responsive tables */
+    .devices-table-container {
+        position: relative;
+        overflow: visible;
+    }
+    
+    /* For larger screens, ensure no horizontal scrolling issues */
+    @media (min-width: 769px) {
+        .devices-table-container {
+            overflow-x: visible;
+        }
+        
+        .table-responsive {
+            overflow: visible;
+        }
+    }
+    
+    /* For small screens, allow horizontal scroll but ensure dropdowns are visible */
+    @media (max-width: 768px) {
+        .devices-table-container {
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+        
+        .table-responsive {
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+        
+        /* Ensure dropdown menus are above everything on mobile */
+        .dropdown-menu {
+            z-index: 1060 !important;
+        }
+    }
+    
+    /* Ensure dropdown is always properly positioned */
+    .dropdown {
+        position: static;
+    }
+    
+    .dropdown-menu {
+        z-index: 1050;
+        /* Prevent text wrapping in dropdown items */
+        white-space: nowrap;
+    }
+    
+    /* Ensure table cells don't interfere with dropdown positioning */
+    .table td:last-child {
+        position: relative;
+        overflow: visible;
+    }
+    
+    /* Improve dropdown button appearance */
+    .dropdown-toggle::after {
+        display: none; /* Hide default Bootstrap arrow since we're using material icons */
+    }
+    
+    /* Ensure proper spacing for dropdown items */
+    .dropdown-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+    }
+    
+    .dropdown-item .material-icons {
+        font-size: 1.125rem;
+        width: 1.5rem;
+        display: inline-flex;
+        justify-content: center;
+    }
+</style>
+
 <div class="page-header">
     <h1><span class="material-icons">devices</span> All Devices</h1>
     <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary">
@@ -22,7 +96,7 @@
             </small>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+            <div class="devices-table-container table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
                         <tr>
@@ -577,4 +651,74 @@ function showAlert(type, message) {
     transition: all 0.3s ease;
 }
 </style>
+
+<!-- JavaScript for dropdown positioning fix -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fix dropdown positioning in responsive tables
+    const dropdowns = document.querySelectorAll('.dropdown');
+    
+    dropdowns.forEach(function(dropdown) {
+        const button = dropdown.querySelector('.dropdown-toggle');
+        const menu = dropdown.querySelector('.dropdown-menu');
+        
+        if (button && menu) {
+            button.addEventListener('click', function() {
+                // Small delay to ensure Bootstrap has processed the click
+                setTimeout(function() {
+                    if (menu.classList.contains('show')) {
+                        // Check if we're on mobile
+                        if (window.innerWidth <= 768) {
+                            // Get button position
+                            const rect = button.getBoundingClientRect();
+                            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                            
+                            // Position the menu relative to the button
+                            menu.style.position = 'fixed';
+                            menu.style.top = (rect.bottom + scrollTop) + 'px';
+                            menu.style.left = (rect.right + scrollLeft - menu.offsetWidth) + 'px';
+                            menu.style.zIndex = '1060';
+                            
+                            // Ensure menu stays within viewport
+                            const menuRect = menu.getBoundingClientRect();
+                            if (menuRect.right > window.innerWidth) {
+                                menu.style.left = (window.innerWidth - menu.offsetWidth - 10) + 'px';
+                            }
+                            if (menuRect.left < 0) {
+                                menu.style.left = '10px';
+                            }
+                            if (menuRect.bottom > window.innerHeight) {
+                                menu.style.top = (rect.top + scrollTop - menu.offsetHeight) + 'px';
+                            }
+                        }
+                    }
+                }, 10);
+            });
+            
+            // Reset positioning when dropdown is hidden
+            button.addEventListener('hidden.bs.dropdown', function() {
+                menu.style.position = '';
+                menu.style.top = '';
+                menu.style.left = '';
+                menu.style.zIndex = '';
+            });
+        }
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        const activeDropdowns = document.querySelectorAll('.dropdown-menu.show');
+        activeDropdowns.forEach(function(menu) {
+            if (window.innerWidth > 768) {
+                // Reset positioning for larger screens
+                menu.style.position = '';
+                menu.style.top = '';
+                menu.style.left = '';
+                menu.style.zIndex = '';
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

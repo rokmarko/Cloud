@@ -12,6 +12,7 @@ from src.models import User, Device, Checklist, LogbookEntry, Pilot, Event
 from src.forms import PilotMappingForm
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
+from src.services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -813,3 +814,69 @@ def event_detail(event_id):
     return render_template('admin/event_detail.html',
                          title=f'Event {event_id}',
                          event=event)
+
+
+@admin_bp.route('/test-email', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def test_email():
+    """Test email functionality."""
+    if request.method == 'POST':
+        recipient_email = request.form.get('recipient_email', '').strip()
+        
+        if not recipient_email:
+            flash('Please provide a recipient email address.', 'error')
+            return redirect(url_for('admin.test_email'))
+        
+        # Send test email
+        try:
+            success = EmailService.send_test_email(recipient_email)
+            
+            if success:
+                flash(f'Test email sent successfully to {recipient_email}!', 'success')
+                current_app.logger.info(f"Admin {current_user.email} sent test email to {recipient_email}")
+            else:
+                flash(f'Failed to send test email to {recipient_email}. Check the logs for details.', 'error')
+                
+        except Exception as e:
+            flash(f'Error sending test email: {str(e)}', 'error')
+            current_app.logger.error(f"Error in admin test email: {str(e)}")
+        
+        return redirect(url_for('admin.test_email'))
+    
+    return render_template('admin/test_email.html', title='Test Email Configuration')
+
+
+@admin_bp.route('/test-device-claimed-email', methods=['POST'])
+@login_required
+@admin_required
+def test_device_claimed_email():
+    """Test device claimed email functionality."""
+    recipient_email = request.form.get('recipient_email', '').strip()
+    
+    if not recipient_email:
+        flash('Please provide a recipient email address.', 'error')
+        return redirect(url_for('admin.test_email'))
+    
+    # Send test device claimed email with sample data
+    try:
+        success = EmailService.send_device_claimed_email(
+            user_email=recipient_email,
+            user_nickname="Test User",
+            device_name="Test Aircraft",
+            device_type="aircraft",
+            device_model="Cessna 172",
+            device_registration="N123TEST"
+        )
+        
+        if success:
+            flash(f'Test device claimed email sent successfully to {recipient_email}!', 'success')
+            current_app.logger.info(f"Admin {current_user.email} sent test device claimed email to {recipient_email}")
+        else:
+            flash(f'Failed to send test device claimed email to {recipient_email}. Check the logs for details.', 'error')
+            
+    except Exception as e:
+        flash(f'Error sending test device claimed email: {str(e)}', 'error')
+        current_app.logger.error(f"Error in admin test device claimed email: {str(e)}")
+    
+    return redirect(url_for('admin.test_email'))

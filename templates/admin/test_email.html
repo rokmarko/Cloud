@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1><span class="material-icons me-2">email</span>Test Email Configuration</h1>
+            <p class="text-muted">Test the email functionality to ensure notifications are working correctly.</p>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <span class="material-icons me-2">settings</span>Email Configuration Test
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.test_email') }}">
+                        <div class="mb-3">
+                            <label for="recipient_email" class="form-label">
+                                <span class="material-icons me-2">person</span>Recipient Email Address
+                            </label>
+                            <input type="email" 
+                                   class="form-control" 
+                                   id="recipient_email" 
+                                   name="recipient_email" 
+                                   placeholder="test@example.com"
+                                   value="{{ current_user.email }}"
+                                   required>
+                            <div class="form-text">Enter the email address where you want to send the test email.</div>
+                        </div>
+                        
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <span class="material-icons me-2">send</span>Send Test Email
+                            </button>
+                            
+                            <button type="submit" 
+                                    class="btn btn-outline-primary" 
+                                    formaction="{{ url_for('admin.test_device_claimed_email') }}">
+                                <span class="material-icons me-2">devices</span>Test Device Claimed Email
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <span class="material-icons me-2">info</span>Email Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Current Configuration:</small>
+                        <div class="mt-2">
+                            <strong>Mail Server:</strong> {{ config.MAIL_SERVER }}<br>
+                            <strong>Port:</strong> {{ config.MAIL_PORT }}<br>
+                            <strong>TLS:</strong> {{ 'Yes' if config.MAIL_USE_TLS else 'No' }}<br>
+                            <strong>Username:</strong> {{ config.MAIL_USERNAME or 'Not set' }}<br>
+                            <strong>Default Sender:</strong> {{ config.MAIL_DEFAULT_SENDER or 'Not set' }}
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <span class="material-icons me-2">lightbulb</span>
+                        <strong>Tips:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Check your spam/junk folder if emails don't arrive</li>
+                            <li>Verify mail server settings in the .env file</li>
+                            <li>Test with your own email first</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <span class="material-icons me-2">description</span>Email Types
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6><span class="material-icons me-2">check_circle</span>Test Email</h6>
+                        <p class="text-muted small">Basic email functionality test to verify SMTP configuration.</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6><span class="material-icons me-2">devices</span>Device Claimed Email</h6>
+                        <p class="text-muted small">Email sent when a user successfully claims a device through the API.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

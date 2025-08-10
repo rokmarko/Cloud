@@ -6,7 +6,9 @@ import os
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from src.app import db, csrf
-from src.models import User, Device
+from src.models import User, Device, LogbookEntry, Pilot
+from src.services.thingsboard_sync import ThingsBoardSyncService
+from src.services.email_service import EmailService
 
 api_bp = Blueprint('api', __name__)
 
@@ -129,6 +131,26 @@ def claim_device():
         
         db.session.add(device)
         db.session.commit()
+        
+        # Send email notification to user
+        try:
+            email_sent = EmailService.send_device_claimed_email(
+                user_email=user.email,
+                user_nickname=user.nickname,
+                device_name=device.name,
+                device_type=device.device_type,
+                device_model=device.model,
+                device_registration=device.registration
+            )
+            
+            if email_sent:
+                current_app.logger.info(f"Device claimed email sent to {user.email} for device '{device.name}' (ID: {device.id})")
+            else:
+                current_app.logger.warning(f"Failed to send device claimed email to {user.email} for device '{device.name}' (ID: {device.id})")
+                
+        except Exception as email_error:
+            # Don't fail the device claiming if email fails
+            current_app.logger.error(f"Error sending device claimed email to {user.email}: {str(email_error)}")
         
         return jsonify({
             'success': True,
