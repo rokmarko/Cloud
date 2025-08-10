@@ -54,11 +54,11 @@ def claim_device():
     Expected JSON payload:
     {
         "user_email": "user@example.com",
-        "device_name": "Aircraft N123AB",
+        "device_name": "My Device",
         "device_id": "external_device_123",
         "device_type": "aircraft",
         "model": "Cessna 172",
-        "serial_number": "17280123",
+        "serial_number": "Nesis XX-1000",
         "registration": "N123AB"
     }
     """
@@ -99,14 +99,19 @@ def claim_device():
         
         # Check if device with this external ID already exists for this user
         existing_device = Device.query.filter_by(
-            user_id=user.id,
-            serial_number=data['device_id']
+            external_device_id=data['device_id'],
         ).first()
         
         if existing_device:
+            existing_user_email = "Unknown"
+            if existing_device and existing_device.user_id:
+                existing_user = User.query.get(existing_device.user_id)
+                if existing_user:
+                    existing_user_email = existing_user.email
+
             return jsonify({
-                'error': 'Device already exists',
-                'message': f'Device with ID {data["device_id"]} is already claimed by this user',
+                'error': f'Device already claimed by user {existing_user_email}',
+                'message': f'Device {data["device_name"]} is already claimed by user {existing_device.user_id}',
                 'device_id': existing_device.id,
                 'device_name': existing_device.name
             }), 409
@@ -114,9 +119,10 @@ def claim_device():
         # Create new device
         device = Device(
             name=data['device_name'],
-            device_type=data.get('device_type', 'other'),
+            device_type=data.get('device_type', 'aircraft'),
             model=data.get('model'),
-            serial_number=data['device_id'],  # Use external device_id as serial_number
+            serial_number=data['device_name'],
+            external_device_id=data['device_id'],  # Use external device_id as serial_number
             registration=data.get('registration'),
             user_id=user.id
         )

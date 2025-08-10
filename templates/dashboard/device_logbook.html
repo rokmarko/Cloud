@@ -12,9 +12,14 @@
         <a href="{{ url_for('dashboard.devices') }}" class="btn btn-outline-secondary me-2">
             <i class="bi bi-arrow-left"></i> Back to Devices
         </a>
+        {% if device.user_id == current_user.id %}
+        <a href="{{ url_for('dashboard.device_pilots', device_id=device.id) }}" class="btn btn-outline-info me-2">
+            <i class="fas fa-user-pilot"></i> Manage Pilots
+        </a>
         <a href="{{ url_for('dashboard.edit_device', device_id=device.id) }}" class="btn btn-outline-primary">
             <i class="bi bi-pencil"></i> Edit Device
         </a>
+        {% endif %}
     </div>
 </div>
 

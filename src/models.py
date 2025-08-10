@@ -359,7 +359,8 @@ class InstrumentLayout(db.Model):
     instrument_type = db.Column(db.String(50), nullable=False)  # digi, indu_57mm, indu_80mm, altimeter_80mm
     layout_data = db.Column(db.Text, nullable=False)  # JSON string of layout configuration
     xml_content = db.Column(db.Text, nullable=False)  # Full XML content of the layout
-    thumbnail_filename = db.Column(db.String(255), nullable=True)  # PNG thumbnail filename
+    thumbnail_filename = db.Column(db.String(255), nullable=True)  # PNG thumbnail filename (legacy)
+    thumbnail_base64 = db.Column(db.Text, nullable=True)  # Base64 encoded PNG thumbnail data
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -369,6 +370,13 @@ class InstrumentLayout(db.Model):
     
     def __repr__(self):
         return f'<InstrumentLayout {self.title}>'
+    
+    @property
+    def thumbnail_data_uri(self):
+        """Get thumbnail as data URI for HTML img src."""
+        if self.thumbnail_base64:
+            return f"data:image/png;base64,{self.thumbnail_base64}"
+        return None
 
 
 class LogbookEntry(db.Model):

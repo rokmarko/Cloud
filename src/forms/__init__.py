@@ -73,8 +73,8 @@ class DeviceForm(FlaskForm):
         ('trike', 'Trike')
     ], validators=[DataRequired()])
     model = StringField('Model', validators=[Length(max=100)])
-    serial_number = StringField('Serial Number', validators=[Length(max=100)])
-    registration = StringField('Registration', validators=[Length(max=20)])
+    serial_number = StringField('Instrument Model and Serial number', validators=[Length(max=100)])
+    registration = StringField('Aircraft Registration', validators=[Length(max=20)])
     submit = SubmitField('Save Device')
 
 

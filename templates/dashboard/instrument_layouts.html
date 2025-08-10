@@ -63,7 +63,13 @@
         {% for layout in layouts %}
         <div class="col-lg-4 col-md-6">
             <div class="card layout-card">
-                {% if layout.thumbnail_filename %}
+                {% if layout.thumbnail_base64 %}
+                    <img src="{{ layout.thumbnail_data_uri }}" 
+                         class="card-img-top layout-thumbnail" 
+                         alt="{{ layout.title }} thumbnail"
+                         style="height: 200px; object-fit: contain; background-color: #f8f9fa;">
+                {% elif layout.thumbnail_filename %}
+                    <!-- Backward compatibility for file-based thumbnails -->
                     <img src="{{ url_for('dashboard.serve_thumbnail', filename=layout.thumbnail_filename) }}" 
                          class="card-img-top layout-thumbnail" 
                          alt="{{ layout.title }} thumbnail"
@@ -342,9 +348,13 @@ function saveThumbnailToBackend(thumbnailData, callback) {
     .then(result => {
         console.log('Thumbnail saved successfully:', result);
         
-        // Refresh the specific layout card instead of reloading the entire page
-        if (result.thumbnail_filename) {
-            refreshLayoutCard(currentLayoutId, result.thumbnail_filename);
+        // For base64 thumbnails, we need to reload the page to get updated data
+        // since the thumbnail is now stored in the database
+        if (result.has_thumbnail) {
+            // Add a small delay and fade effect before reloading
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
         }
         
         callback();

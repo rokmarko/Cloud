@@ -7,21 +7,77 @@ import os
 import base64
 import uuid
 from io import BytesIO
+from datetime import datetime
 from PIL import Image
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
 from src.app import db
 from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
-from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, InstrumentLayoutImportForm, LogbookEntryForm, InitialLogbookTimeForm
+from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, InstrumentLayoutImportForm, LogbookEntryForm, InitialLogbookTimeForm, DevicePilotMappingForm
 from src.services.thingsboard_sync import ThingsBoardSyncService
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
 
+def process_thumbnail_base64(base64_data, thumbnail_size=(300, 200)):
+    """
+    Process base64 image data and return optimized base64 for database storage.
+    
+    Args:
+        base64_data: Base64 encoded image data (may include data URI prefix)
+        thumbnail_size: Tuple of (width, height) for thumbnail size
+    
+    Returns:
+        str: Optimized base64 encoded PNG data for database storage, or None if failed
+    """
+    try:
+        # Remove data URI prefix if present (e.g., "data:image/png;base64,")
+        if ',' in base64_data:
+            base64_data = base64_data.split(',')[1]
+        
+        # Decode base64 data
+        image_data = base64.b64decode(base64_data)
+        
+        # Open image with PIL
+        image = Image.open(BytesIO(image_data))
+        
+        # Convert to RGB if necessary (for PNG with transparency)
+        if image.mode in ('RGBA', 'LA', 'P'):
+            # Create white background
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            if image.mode == 'P':
+                image = image.convert('RGBA')
+            background.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+            image = background
+        
+        # Resize to thumbnail size while maintaining aspect ratio
+        image.thumbnail(thumbnail_size, Image.Resampling.LANCZOS)
+        
+        # Create thumbnail with white background if needed
+        if image.size != thumbnail_size:
+            thumbnail = Image.new('RGB', thumbnail_size, (255, 255, 255))
+            # Center the image
+            x = (thumbnail_size[0] - image.size[0]) // 2
+            y = (thumbnail_size[1] - image.size[1]) // 2
+            thumbnail.paste(image, (x, y))
+            image = thumbnail
+        
+        # Convert back to base64 for database storage
+        buffer = BytesIO()
+        image.save(buffer, format='PNG', quality=95, optimize=True)
+        optimized_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        return optimized_base64
+        
+    except Exception as e:
+        logging.error(f"Error processing thumbnail base64: {e}")
+        return None
+
+
 def generate_thumbnail_from_base64(base64_data, layout_id, thumbnail_size=(300, 200)):
     """
-    Generate a PNG thumbnail from base64 image data.
+    Generate a PNG thumbnail from base64 image data (legacy file-based storage).
     
     Args:
         base64_data: Base64 encoded image data (may include data URI prefix)
@@ -1286,20 +1342,20 @@ def api_update_instrument_layout(layout_id):
     
     # Handle thumbnail generation if provided
     if 'thumbnail' in request_data and request_data['thumbnail']:
-        # Delete old thumbnail if it exists
-        if layout.thumbnail_filename:
-            delete_thumbnail(layout.thumbnail_filename)
+        # Process thumbnail data for database storage
+        processed_base64 = process_thumbnail_base64(request_data['thumbnail'])
         
-        # Generate new thumbnail
-        new_thumbnail = generate_thumbnail_from_base64(
-            request_data['thumbnail'], 
-            layout_id
-        )
-        if new_thumbnail:
-            layout.thumbnail_filename = new_thumbnail
-            logging.info(f"Generated thumbnail {new_thumbnail} for layout {layout_id}")
+        if processed_base64:
+            # Delete old thumbnail file if it exists (backward compatibility)
+            if layout.thumbnail_filename:
+                delete_thumbnail(layout.thumbnail_filename)
+                layout.thumbnail_filename = None
+            
+            # Store base64 in database
+            layout.thumbnail_base64 = processed_base64
+            logging.info(f"Updated thumbnail base64 for layout {layout_id}")
         else:
-            logging.warning(f"Failed to generate thumbnail for layout {layout_id}")
+            logging.warning(f"Failed to process thumbnail for layout {layout_id}")
     
     db.session.commit()
     
@@ -1349,9 +1405,13 @@ def api_delete_instrument_layout(layout_id):
         is_active=True
     ).first_or_404()
     
-    # Delete thumbnail file if it exists
+    # Delete thumbnail file if it exists (backward compatibility)
     if layout.thumbnail_filename:
         delete_thumbnail(layout.thumbnail_filename)
+        layout.thumbnail_filename = None
+    
+    # Clear base64 thumbnail data
+    layout.thumbnail_base64 = None
     
     # Soft delete by setting is_active to False
     layout.is_active = False
@@ -1418,28 +1478,29 @@ def api_update_instrument_layout_thumbnail(layout_id):
         }), 400
     
     try:
-        # Delete old thumbnail if it exists
-        if layout.thumbnail_filename:
-            delete_thumbnail(layout.thumbnail_filename)
+        # Process thumbnail data for database storage
+        processed_base64 = process_thumbnail_base64(thumbnail_data)
         
-        # Generate new thumbnail from editor export
-        # The data comes as "png,base64data" format
-        new_thumbnail = generate_thumbnail_from_base64(thumbnail_data, layout_id)
-        
-        if new_thumbnail:
-            layout.thumbnail_filename = new_thumbnail
+        if processed_base64:
+            # Delete old thumbnail file if it exists (backward compatibility)
+            if layout.thumbnail_filename:
+                delete_thumbnail(layout.thumbnail_filename)
+                layout.thumbnail_filename = None
+            
+            # Store base64 in database
+            layout.thumbnail_base64 = processed_base64
             db.session.commit()
             
-            logging.info(f"Updated thumbnail {new_thumbnail} for layout {layout_id}")
+            logging.info(f"Updated thumbnail base64 for layout {layout_id}")
             return jsonify({
                 'success': True,
                 'message': 'Thumbnail updated successfully',
-                'thumbnail_filename': new_thumbnail
+                'has_thumbnail': True
             })
         else:
             return jsonify({
                 'success': False,
-                'message': 'Failed to generate thumbnail'
+                'message': 'Failed to process thumbnail data'
             }), 500
             
     except Exception as e:
@@ -1522,6 +1583,183 @@ def events():
         event_types=Event.EVENT_BITS,
         stats=stats
     )
+
+
+@dashboard_bp.route('/devices/<int:device_id>/pilots')
+@login_required
+def device_pilots(device_id):
+    """Manage pilot mappings for a device (device owners only)."""
+    # Verify device ownership
+    device = Device.query.filter_by(
+        id=device_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '')
+    
+    # Get pilot mappings for this device
+    query = Pilot.query.filter_by(device_id=device_id, is_active=True)
+    
+    # Apply search filter
+    if search:
+        from src.models import User
+        query = query.join(User).filter(
+            db.or_(
+                Pilot.pilot_name.contains(search),
+                User.email.contains(search),
+                User.nickname.contains(search)
+            )
+        )
+    
+    pilot_mappings = query.order_by(Pilot.pilot_name.asc()).paginate(
+        page=page, per_page=10, error_out=False
+    )
+    
+    # Get unmapped pilots from logbook entries for this device
+    unmapped_pilots = db.session.query(LogbookEntry.pilot_name.distinct().label('pilot_name'))\
+        .filter(LogbookEntry.device_id == device_id)\
+        .filter(LogbookEntry.pilot_name.isnot(None))\
+        .filter(~LogbookEntry.pilot_name.in_(
+            db.session.query(Pilot.pilot_name).filter_by(device_id=device_id)
+        )).all()
+    
+    # Create form for new mappings
+    form = DevicePilotMappingForm()
+    
+    return render_template('dashboard/device_pilots.html',
+                         title=f'Pilot Mappings - {device.name}',
+                         device=device,
+                         pilot_mappings=pilot_mappings,
+                         unmapped_pilots=[p.pilot_name for p in unmapped_pilots],
+                         form=form,
+                         search=search)
+
+
+@dashboard_bp.route('/devices/<int:device_id>/pilots/create', methods=['POST'])
+@login_required
+def create_device_pilot_mapping(device_id):
+    """Create a pilot mapping for a device (device owners only)."""
+    # Verify device ownership
+    device = Device.query.filter_by(
+        id=device_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    form = DevicePilotMappingForm()
+    
+    if form.validate_on_submit():
+        pilot_name = form.pilot_name.data.strip()
+        user_email = form.user_email.data.strip().lower()
+        
+        # Find user by email
+        from src.models import User
+        user = User.query.filter_by(email=user_email, is_active=True).first()
+        if not user:
+            flash(f'No active user found with email: {user_email}', 'error')
+            return redirect(url_for('dashboard.device_pilots', device_id=device_id))
+        
+        # Check if mapping already exists
+        existing = Pilot.query.filter_by(
+            pilot_name=pilot_name,
+            device_id=device_id
+        ).first()
+        
+        if existing:
+            if existing.is_active:
+                flash(f'Pilot mapping already exists: "{pilot_name}" is mapped to {existing.user.email}', 'error')
+            else:
+                # Reactivate existing mapping with new user
+                existing.user_id = user.id
+                existing.is_active = True
+                existing.updated_at = datetime.utcnow()
+                db.session.commit()
+                flash(f'Reactivated pilot mapping: "{pilot_name}" -> {user.email}', 'success')
+            return redirect(url_for('dashboard.device_pilots', device_id=device_id))
+        
+        try:
+            # Create new pilot mapping
+            pilot_mapping = Pilot(
+                pilot_name=pilot_name,
+                user_id=user.id,
+                device_id=device_id
+            )
+            db.session.add(pilot_mapping)
+            db.session.commit()
+            
+            current_app.logger.info(f"Device owner {current_user.nickname} created pilot mapping: "
+                                   f"{pilot_name} -> {user.email} on {device.name}")
+            
+            flash(f'Successfully created pilot mapping: "{pilot_name}" -> {user.email}', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating pilot mapping: {str(e)}")
+            flash('Error creating pilot mapping. Please try again.', 'error')
+    else:
+        # Form validation failed
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{form[field].label.text}: {error}', 'error')
+    
+    return redirect(url_for('dashboard.device_pilots', device_id=device_id))
+
+
+@dashboard_bp.route('/devices/<int:device_id>/pilots/<int:pilot_id>/delete', methods=['POST'])
+@login_required
+def delete_device_pilot_mapping(device_id, pilot_id):
+    """Delete a pilot mapping for a device (device owners only)."""
+    # Verify device ownership
+    device = Device.query.filter_by(
+        id=device_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    pilot = Pilot.query.filter_by(id=pilot_id, device_id=device_id).first_or_404()
+    
+    try:
+        pilot_info = f"{pilot.pilot_name} -> {pilot.user.email}"
+        db.session.delete(pilot)
+        db.session.commit()
+        
+        current_app.logger.info(f"Device owner {current_user.nickname} deleted pilot mapping: {pilot_info} on {device.name}")
+        flash(f'Successfully deleted pilot mapping: {pilot_info}', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error deleting pilot mapping: {str(e)}")
+        flash('Error deleting pilot mapping. Please try again.', 'error')
+    
+    return redirect(url_for('dashboard.device_pilots', device_id=device_id))
+
+
+@dashboard_bp.route('/api/devices/<int:device_id>/pilots/suggestions')
+@login_required
+def device_pilot_suggestions(device_id):
+    """Get pilot name suggestions for a specific device (device owners only)."""
+    # Verify device ownership
+    device = Device.query.filter_by(
+        id=device_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    query = request.args.get('q', '').strip()
+    
+    if not query or len(query) < 2:
+        return jsonify([])
+    
+    # Get pilot names from logbook entries for this device that match the query
+    pilot_names = db.session.query(LogbookEntry.pilot_name.distinct().label('pilot_name'))\
+        .filter(LogbookEntry.device_id == device_id)\
+        .filter(LogbookEntry.pilot_name.isnot(None))\
+        .filter(LogbookEntry.pilot_name.contains(query))\
+        .limit(10).all()
+    
+    return jsonify([p.pilot_name for p in pilot_names])
 
 
 @dashboard_bp.route('/thumbnails/instrument_layouts/<filename>')
