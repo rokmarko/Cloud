@@ -166,7 +166,7 @@ class InitialLogbookTimeForm(FlaskForm):
 
 
 class PilotMappingForm(FlaskForm):
-    """Form for creating pilot mappings."""
+    """Form for creating pilot mappings (admin)."""
     pilot_name = StringField('Pilot Name', validators=[DataRequired(), Length(min=1, max=100)])
     user_id = SelectField('Map to User', coerce=int, validators=[DataRequired()])
     device_id = SelectField('Device', coerce=int, validators=[DataRequired()])
@@ -177,3 +177,12 @@ class PilotMappingForm(FlaskForm):
         # Populate choices in the view, not here
         self.user_id.choices = []
         self.device_id.choices = []
+
+
+class DevicePilotMappingForm(FlaskForm):
+    """Form for device owners to create pilot mappings for their devices."""
+    pilot_name = StringField('Pilot Name', validators=[DataRequired(), Length(min=1, max=100)],
+                           description='Enter the pilot name exactly as it appears in logbook entries')
+    user_email = StringField('User Email', validators=[DataRequired(), Email()],
+                           description='Email address of the user account to map this pilot to')
+    submit = SubmitField('Create Pilot Mapping')
