@@ -13,7 +13,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-instance/
+instance/kanardiacloud.db
 
 # Distribution / packaging
 .Python
