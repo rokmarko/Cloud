@@ -451,7 +451,7 @@ class ThingsBoardSyncService:
             result['errors'].append(error_msg)
         
         return result
-    
+
     def _call_thingsboard_api(self, device_id: str) -> Optional[List[Dict[str, Any]]]:
         """
         Call ThingsBoard RPC API to get logbook entries.
@@ -476,8 +476,8 @@ class ThingsBoardSyncService:
         url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
         payload = {
-            "method": "syncLog",
-            "params": { "count": 200 }  # Adjust count as needed
+            "method": "syncLog", #if pump else "getEvents",
+            "params": { "count": 1000 }  # Adjust count as needed
         }
         
         headers = {
