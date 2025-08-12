@@ -222,7 +222,6 @@ def force_rebuild_logbook(device_id):
         db.session.commit()
         
         message = (f"Force rebuild completed for device '{device.name}': "
-                  f"cleared {cleared_messages} event messages, "
                   f"removed {result.get('removed_entries', 0)} old entries, "
                   f"created {result.get('new_entries', 0)} new entries")
         

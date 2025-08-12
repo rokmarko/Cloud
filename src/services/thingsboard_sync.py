@@ -19,12 +19,13 @@ logger.setLevel(logging.DEBUG)
 class ThingsBoardSyncService:
     """Service for syncing logbook entries from ThingsBoard server."""
     
-    def __init__(self):
+    def __init__(self, event_batch_size: int = 500):
         self.base_url = os.getenv('THINGSBOARD_URL', 'https://aetos.kanardia.eu:8088')
         self.username = os.getenv('THINGSBOARD_USERNAME', 'tenant@thingsboard.local')
         self.password = os.getenv('THINGSBOARD_PASSWORD', 'tenant')
         # self.tenant_id = os.getenv('THINGSBOARD_TENANT_ID', 'tenant')
         self.timeout = 30  # seconds
+        self.event_batch_size = event_batch_size  # Configurable batch size for event processing
         self._jwt_token = None
         self._token_expires_at = None
         self._last_auth_check = None
@@ -420,6 +421,11 @@ class ThingsBoardSyncService:
         }
         
         try:
+            # First check if device is active in ThingsBoard
+            if not self._is_device_active_in_thingsboard(device.external_device_id):
+                logger.info(f"Device {device.name} is not active in ThingsBoard, skipping events RPC call")
+                return None
+ 
             # Call ThingsBoard RPC API
             logbook_data = self._call_thingsboard_api(device.external_device_id)
             
@@ -462,10 +468,6 @@ class ThingsBoardSyncService:
         Returns:
             List of logbook entry dictionaries or None if error
         """
-        # First check if device is active in ThingsBoard
-        if not self._is_device_active_in_thingsboard(device_id):
-            logger.info(f"Device {device_id} is not active in ThingsBoard, skipping RPC call")
-            return None
         
         # Authenticate and get JWT token
         jwt_token = self._authenticate()
@@ -476,7 +478,7 @@ class ThingsBoardSyncService:
         url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
         payload = {
-            "method": "syncLog", #if pump else "getEvents",
+            "method": "syncLog",
             "params": { "count": 1000 }  # Adjust count as needed
         }
         
@@ -806,27 +808,95 @@ class ThingsBoardSyncService:
         }
         
         try:
-            # Call ThingsBoard RPC API for events
-            events_data = self._call_thingsboard_events_api(device.external_device_id, device.current_logger_page or 0)
+            # First check if device is active in ThingsBoard
+            if not self._is_device_active_in_thingsboard(device.external_device_id):
+                logger.info(f"Device {device.name} is not active in ThingsBoard, skipping events RPC call")
+                return None
+        
+            # First call ThingsBoard RPC API with syncLog method
+            events_data = self._call_thingsboard_events_api(
+                device_id=device.external_device_id, 
+                method="syncEvents", 
+                params={
+                    'count': 5000,  # Adjust count as needed
+                    'last_event': device.current_logger_page or 0
+                }
+            )
             
-            events_list = []
+            total_events_processed = 0
             if events_data:
-                # Extract current logger page if provided
-                if isinstance(events_data, dict) and 'log_position' in events_data:
-                    device.current_logger_page = events_data.get('log_position', 0)
-                    device.updated_at = datetime.utcnow()
-                    events_list = events_data.get('events', [])
+                # Extract events and check for remaining data
+                if isinstance(events_data, dict):
+                    # Update current logger page if provided
+                    if 'log_position' in events_data:
+                        device.current_logger_page = events_data.get('log_position', 0)
+                        device.updated_at = datetime.utcnow()
+                    
+                    # Process initial events from syncLog call
+                    initial_events = events_data.get('events', [])
+                    if initial_events:
+                        batch_result = self._process_events(device, initial_events)
+                        result['new_events'] += batch_result['new_events']
+                        result['errors'].extend(batch_result['errors'])
+                        total_events_processed += len(initial_events)
+                    
+                    # Check if there are remaining events to fetch
+                    remaining = int(events_data.get('remaining', '0'))
+                    logger.debug(f"Initial syncLog call for device {device.name}: {len(initial_events)} events processed, {remaining} remaining")
+                    
+                    # If there are remaining events, pump them with getEvents calls
+                    pump_iteration = 0
+                    while remaining > 0:
+                        pump_iteration += 1
+                        logger.debug(f"Pumping iteration {pump_iteration}: {remaining} events remaining for device {device.name}")
+                        
+                        additional_data = self._call_thingsboard_events_api(device_id=device.external_device_id, method="getEvents")
+                        
+                        if not additional_data:
+                            logger.warning(f"Failed to fetch remaining events for device {device.name} on iteration {pump_iteration}")
+                            break
+                        
+                        if isinstance(additional_data, dict):
+                            additional_events = additional_data.get('events', [])
+                            if additional_events:
+                                # Process this batch immediately
+                                batch_result = self._process_events(device, additional_events)
+                                result['new_events'] += batch_result['new_events']
+                                result['errors'].extend(batch_result['errors'])
+                                total_events_processed += len(additional_events)
+                            
+                            remaining = int(additional_data.get('remaining', '0'))
+                            logger.debug(f"Iteration {pump_iteration}: processed {len(additional_events)} events, {remaining} still remaining")
+                            
+                        elif isinstance(additional_data, list):
+                            # Process the list of events immediately
+                            if additional_data:
+                                batch_result = self._process_events(device, additional_data)
+                                result['new_events'] += batch_result['new_events']
+                                result['errors'].extend(batch_result['errors'])
+                                total_events_processed += len(additional_data)
+                            remaining = 0  # Assume no more if we get a list
+                            
+                        else:
+                            logger.warning(f"Unexpected data format from getEvents API for device {device.name} on iteration {pump_iteration}")
+                            break
+                        
+                        # Safety checks to prevent infinite loops
+                        if total_events_processed > 100000:  # Arbitrary large limit
+                            logger.warning(f"Reached safety limit of {total_events_processed} events for device {device.name}, stopping")
+                            break
+                        
+                        if pump_iteration > 100:  # Prevent infinite pumping
+                            logger.warning(f"Reached maximum pump iterations ({pump_iteration}) for device {device.name}, stopping")
+                            break
+                            
                 else:
-                    events_list = events_data if isinstance(events_data, list) else []
+                    logger.warning(f"Unexpected events data format for device {device.name}")
             else:
                 logger.warning(f"No events data received for device {device.name}")
             
-            result['total_events'] = len(events_list)
-            
-            # Process each event
-            for event in events_list:
-                if self._process_device_event(device, event):
-                    result['new_events'] += 1
+            result['total_events'] = total_events_processed
+            logger.info(f"Total events processed for device {device.name}: {result['new_events']}/{total_events_processed} new events")
             
             # Only process new logbook entries from new events (not rebuild everything)
             if result['new_events'] > 0:
@@ -847,7 +917,7 @@ class ThingsBoardSyncService:
             else:
                 logger.debug(f"No new events for device {device.name}, skipping logbook generation")
             
-            # Commit all changes for this device
+            # Final commit for any remaining changes (like logbook entries)
             db.session.commit()
             
             logger.info(f"Device {device.name} events: {result['new_events']}/{result['total_events']} new events")
@@ -860,21 +930,20 @@ class ThingsBoardSyncService:
         
         return result
 
-    def _call_thingsboard_events_api(self, device_id: str, last_event: int) -> Optional[Dict[str, Any]]:
+    def _call_thingsboard_events_api(self, device_id: str, method: str, params: Optional[Dict[str, Any]] = {}) -> Optional[Dict[str, Any]]:
         """
-        Call ThingsBoard RPC API to get device events.
+        Call ThingsBoard RPC API to get device events using specified method.
         
         Args:
             device_id: External device ID in ThingsBoard
+            method: RPC method to call ("syncLog" or "getEvents")
+            last_event: Last processed event position (only used for syncLog)
+            count: Number of events to request
             
         Returns:
             Events data dictionary or None if error
         """
-        # First check if device is active in ThingsBoard
-        if not self._is_device_active_in_thingsboard(device_id):
-            logger.info(f"Device {device_id} is not active in ThingsBoard, skipping events RPC call")
-            return None
-        
+       
         # Authenticate and get JWT token
         jwt_token = self._authenticate()
         if not jwt_token:
@@ -883,9 +952,10 @@ class ThingsBoardSyncService:
         
         url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
+        # Build payload based on method
         payload = {
-            "method": "syncEvents",
-            "params": { "count": 5000, "last_event": last_event }
+            "method": method,
+            "params": params
         }
         
         headers = {
@@ -896,9 +966,8 @@ class ThingsBoardSyncService:
         }
         
         try:
-       
-            logger.debug(f"Calling ThingsBoard events API for device {device_id}")
-            
+            logger.debug(f"Calling ThingsBoard {method} API for device {device_id}"
+                        f"{f' with params {payload}' if payload else ''}")
             response = requests.post(
                 url=url,
                 json=payload,
@@ -922,23 +991,23 @@ class ThingsBoardSyncService:
                     data = json.loads(decompressed.decode('utf-8'))
                     logger.debug(f"Decompressed and loaded JSON data for device {device_id}")
                 except Exception as e:
-                    logger.error(f"Failed to decompress or decode ThingsBoard events data for device {device_id}: {str(e)}")
+                    logger.error(f"Failed to decompress or decode ThingsBoard {method} data for device {device_id}: {str(e)}")
                     return None
             
-            logger.debug(f"Retrieved events data from ThingsBoard for device {device_id}")
+            logger.debug(f"Retrieved {method} data from ThingsBoard for device {device_id}")
             return data
             
         except requests.exceptions.Timeout:
-            logger.error(f"Timeout calling ThingsBoard events API for device {device_id}")
+            logger.error(f"Timeout calling ThingsBoard {method} API for device {device_id}")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"HTTP error calling ThingsBoard events API for device {device_id}: {str(e)}")
+            logger.error(f"HTTP error calling ThingsBoard {method} API for device {device_id}: {str(e)}")
             return None
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON response from ThingsBoard events API for device {device_id}: {str(e)}")
+            logger.error(f"Invalid JSON response from ThingsBoard {method} API for device {device_id}: {str(e)}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error calling ThingsBoard events API for device {device_id}: {str(e)}")
+            logger.error(f"Unexpected error calling ThingsBoard {method} API for device {device_id}: {str(e)}")
             return None
 
     def _process_device_event(self, device: Device, event_data: Dict[str, Any]) -> bool:
@@ -1039,8 +1108,7 @@ class ThingsBoardSyncService:
             # We identify event-generated entries by checking if they have a device_id and
             # contain specific text in remarks indicating they were generated from events
             existing_event_entries = LogbookEntry.query.filter(
-                LogbookEntry.device_id == device.id,
-                LogbookEntry.remarks.like('%Generated from device events%')
+                LogbookEntry.device_id == device.id
             ).all()
             
             logger.debug(f"Found {len(existing_event_entries)} existing event-generated logbook entries for device {device.name}")
@@ -1071,7 +1139,7 @@ class ThingsBoardSyncService:
             result['errors'].append(error_msg)
             return result
     
-    def _build_logbook_entries_from_new_events(self, device: Device, num_new_events: int) -> Dict[str, Any]:
+    def _build_logbook_entries_from_new_events(self, device: Device) -> Dict[str, Any]:
         """
         Build logbook entries from the latest takeoff/landing event pairs (only new events).
         This is more efficient than rebuilding the entire logbook.
@@ -1090,13 +1158,10 @@ class ThingsBoardSyncService:
         }
         
         try:
-            # Get recent events (last processed + some overlap for sequence completion)
-            # We need more than just the new events to ensure we can complete flight sequences
-            lookback_buffer = max(20, num_new_events * 2)  # At least 20 events or 2x new events
-            
+          
             recent_events = Event.query.filter_by(device_id=device.id)\
                 .order_by(Event.total_time.desc())\
-                .limit(lookback_buffer).all()
+                .limit(20).all()
             
             if not recent_events:
                 logger.debug(f"No recent events found for device {device.name}")
@@ -1294,12 +1359,7 @@ class ThingsBoardSyncService:
         }
         
         try:
-            # Clear all events
-            events_count = Event.query.count()
-            Event.query.delete()
-            result['events_cleared'] = events_count
-            logger.info(f"Cleared {events_count} events from database")
-            
+         
             # Clear all event-generated logbook entries
             event_entries = LogbookEntry.query.filter(
                 LogbookEntry.remarks.like('%Generated from device events%')
@@ -1555,6 +1615,56 @@ class ThingsBoardSyncService:
         except Exception as e:
             logger.error(f"Unexpected error sending checklist to device {device_id}: {e}")
             return False
+
+    def _process_events(self, device: Device, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Process a list of events for better performance and memory management.
+        
+        Args:
+            device: Device instance
+            events: List of event dictionaries from ThingsBoard
+            
+        Returns:
+            Dict with processing results including new events count and errors
+        """
+        result = {
+            'total_events': len(events),
+            'new_events': 0,
+            'errors': []
+        }
+        
+        if not events:
+            logger.debug(f"No events to process for device {device.name}")
+            return result
+        
+        logger.info(f"Processing {len(events)} events for device {device.name}")
+        
+        # Process all events at once
+        for event_idx, event in enumerate(events):
+            try:
+                if self._process_device_event(device, event):
+                    result['new_events'] += 1
+            except Exception as e:
+                error_msg = f"Failed to process event {event_idx + 1} for device {device.name}: {str(e)}"
+                logger.error(error_msg)
+                result['errors'].append(error_msg)
+        
+        # Commit all changes to database at once
+        try:
+            db.session.commit()
+            logger.info(f"Committed all events: {result['new_events']} new events processed for device {device.name}")
+            
+        except Exception as e:
+            db.session.rollback()
+            error_msg = f"Failed to commit events for device {device.name}: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+        
+        logger.info(f"Completed processing for device {device.name}: "
+                   f"{result['new_events']}/{result['total_events']} new events processed, "
+                   f"{len(result['errors'])} errors")
+        
+        return result
 
 
 # Create singleton instance
