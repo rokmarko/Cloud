@@ -1,0 +1,42 @@
+[Unit]
+Description=KanardiaCloud Flask Application
+Documentation=https://github.com/rokmarko/kanardiacloud
+After=network.target
+Wants=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/home/rok/src/Cloud-1
+Environment=PATH=/home/rok/Branch/NavSync/Protected/Cloud/venv/bin
+Environment=FLASK_ENV=production
+Environment=FLASK_DEBUG=0
+ExecStart=/home/rok/Branch/NavSync/Protected/Cloud/venv/bin/gunicorn --config gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kanardiacloud
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/rok/src/Cloud-1/instance
+ReadWritePaths=/var/log/kanardiacloud
+ReadWritePaths=/var/run/kanardiacloud
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Health check
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
