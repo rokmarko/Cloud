@@ -6,7 +6,7 @@ import requests
 import json
 import logging
 import os
-from datetime import datetime, date, timedelta, time
+from datetime import datetime, date, timedelta, time, timezone
 from typing import List, Dict, Any, Optional
 from src.app import db
 from src.models import Device, LogbookEntry, User, Pilot, Event
@@ -23,7 +23,6 @@ class ThingsBoardSyncService:
         self.base_url = os.getenv('THINGSBOARD_URL', 'https://aetos.kanardia.eu:8088')
         self.username = os.getenv('THINGSBOARD_USERNAME', 'tenant@thingsboard.local')
         self.password = os.getenv('THINGSBOARD_PASSWORD', 'tenant')
-        # self.tenant_id = os.getenv('THINGSBOARD_TENANT_ID', 'tenant')
         self.timeout = 30  # seconds
         self.event_batch_size = event_batch_size  # Configurable batch size for event processing
         self._jwt_token = None
@@ -830,7 +829,7 @@ class ThingsBoardSyncService:
                     # Update current logger page if provided
                     if 'log_position' in events_data:
                         device.current_logger_page = events_data.get('log_position', 0)
-                        device.updated_at = datetime.utcnow()
+                        device.updated_at = datetime.now(timezone.utc)
                     
                     # Process initial events from syncLog call
                     initial_events = events_data.get('events', [])
@@ -1231,7 +1230,8 @@ class ThingsBoardSyncService:
 
     def _build_logbook_entries_from_events(self, device: Device) -> Dict[str, Any]:
         """
-        Build logbook entries from takeoff/landing event pairs.
+        Build logbook entries from engine and flight event pairs using the ConstructEntries approach.
+        Based on the C++ Log2Logbook::ConstructEntries method.
         
         Args:
             device: Device instance
@@ -1246,31 +1246,49 @@ class ThingsBoardSyncService:
         }
         
         try:
-            # Get all takeoff and landing events for this device, ordered by total_time
+            # Get all events for this device, ordered by total_time
             events = Event.query.filter_by(device_id=device.id).order_by(Event.total_time.asc()).all()
             
-            # Filter for takeoff and landing events
-            takeoff_events = [e for e in events if e.has_event_bit('Takeoff')]
-            landing_events = [e for e in events if e.has_event_bit('Landing')]
-            
-            logger.debug(f"Found {len(takeoff_events)} takeoff events and {len(landing_events)} landing events for device {device.name}")
-            
-            if not takeoff_events or not landing_events:
-                logger.info(f"No complete takeoff/landing pairs found for device {device.name}")
+            if not events:
+                logger.debug(f"No events found for device {device.name}")
                 return result
             
-            # Build flight sequences from events
-            flight_sequences = self._build_flight_sequences(takeoff_events, landing_events)
+            # Create pairs for engine events (engine start/stop)
+            engine_pairs = self._search_event_pairs(
+                events,
+                start_events=['EngineStart'],  # Engine start events
+                stop_events=['EngineStop'],    # Engine stop events
+                running_events=['EngRun1', 'EngRun2'],  # Engine running events
+                merge_limit_seconds=60  # Merge limit for engine events
+            )
             
-            logger.debug(f"Built {len(flight_sequences)} flight sequences for device {device.name}")
+            # Create pairs for flight events (takeoff/landing)
+            flight_pairs = self._search_event_pairs(
+                events,
+                start_events=['Takeoff'],      # Takeoff events
+                stop_events=['Landing'],       # Landing events
+                running_events=['Flying'],     # Flying events
+                merge_limit_seconds=120        # Merge limit for flight events
+            )
             
-            # Create logbook entries from flight sequences
-            for sequence in flight_sequences:
+            logger.debug(f"Found {len(engine_pairs)} engine pairs and {len(flight_pairs)} flight pairs for device {device.name}")
+            
+            if not engine_pairs and not flight_pairs:
+                logger.debug(f"No engine or flight pairs found for device {device.name}")
+                return result
+            
+            # Construct logbook entries by combining overlapping pairs
+            logbook_entries = self._construct_entries_from_pairs(engine_pairs, flight_pairs)
+            
+            logger.debug(f"Constructed {len(logbook_entries)} logbook entries for device {device.name}")
+            
+            # Create database entries from constructed logbook entries
+            for entry_data in logbook_entries:
                 try:
-                    if self._create_logbook_entry_from_events(device, sequence):
+                    if self._create_logbook_entry_from_constructed_data(device, entry_data):
                         result['new_entries'] += 1
                 except Exception as e:
-                    error_msg = f"Failed to create logbook entry from events: {str(e)}"
+                    error_msg = f"Failed to create logbook entry from constructed data: {str(e)}"
                     logger.error(error_msg)
                     result['errors'].append(error_msg)
             
@@ -1281,6 +1299,406 @@ class ThingsBoardSyncService:
             logger.error(error_msg)
             result['errors'].append(error_msg)
             return result
+    
+    def _search_event_pairs(self, events: List[Event], start_events: List[str], stop_events: List[str], 
+                           running_events: List[str], merge_limit_seconds: int) -> List[tuple]:
+        """
+        Search for event pairs (start/stop) in the events list.
+        Based on the C++ Log2Logbook::SearchPairs method.
+        
+        Args:
+            events: List of events ordered by total_time
+            start_events: List of event names that indicate start
+            stop_events: List of event names that indicate stop
+            running_events: List of event names that indicate running state
+            merge_limit_seconds: Time limit for merging events
+            
+        Returns:
+            List of (start_event, stop_event) tuples
+        """
+        pairs = []
+        i = 0
+        
+        while i < len(events):
+            # Search for the first start event
+            start_idx = None
+            for j in range(i, len(events)):
+                if any(events[j].has_event_bit(event_name) for event_name in start_events):
+                    start_idx = j
+                    break
+            
+            if start_idx is None:
+                break  # No more start events found
+            
+            start_event = events[start_idx]
+            i = start_idx + 1
+            
+            # Search for stop or next start
+            while i < len(events):
+                current_event = events[i]
+                
+                # Check if this is a stop or start event
+                is_stop = any(current_event.has_event_bit(event_name) for event_name in stop_events)
+                is_start = any(current_event.has_event_bit(event_name) for event_name in start_events)
+                
+                # Special case: reached end without finding stop or start
+                if i == len(events) - 1 and not is_stop and not is_start:
+                    # Find the last running event
+                    stop_event = self._find_last_running_event(events, start_idx, i, running_events)
+                    if stop_event:
+                        pairs.append((start_event, stop_event))
+                    break
+                
+                # Stop event found
+                if is_stop:
+                    pairs.append((start_event, current_event))
+                    i += 1
+                    break
+                
+                # New start event found
+                if is_start:
+                    # Check if we can merge based on time difference
+                    if self._can_merge_events(events, start_idx, i, running_events, merge_limit_seconds):
+                        # Merge by skipping this start and continuing
+                        i += 1
+                        continue
+                    else:
+                        # Cannot merge, create pair with last running event
+                        stop_event = self._find_last_running_event(events, start_idx, i - 1, running_events)
+                        if stop_event:
+                            pairs.append((start_event, stop_event))
+                        break  # Don't increment i, use current event as new start
+                
+                i += 1
+        
+        # Remove invalid pairs (where start and stop are the same event)
+        valid_pairs = [(start, stop) for start, stop in pairs if start.id != stop.id]
+        
+        return valid_pairs
+    
+    def _find_last_running_event(self, events: List[Event], start_idx: int, end_idx: int, 
+                                running_events: List[str]) -> Optional[Event]:
+        """
+        Find the last running event between start and end indices.
+        
+        Args:
+            events: List of events
+            start_idx: Start index to search from
+            end_idx: End index to search to
+            running_events: List of running event names
+            
+        Returns:
+            Last running event or None if not found
+        """
+        for i in range(end_idx, start_idx - 1, -1):
+            if any(events[i].has_event_bit(event_name) for event_name in running_events):
+                return events[i]
+        return None
+    
+    def _can_merge_events(self, events: List[Event], start_idx: int, current_idx: int,
+                         running_events: List[str], merge_limit_seconds: int) -> bool:
+        """
+        Check if events can be merged based on time difference.
+        
+        Args:
+            events: List of events
+            start_idx: Index of start event
+            current_idx: Index of current event
+            running_events: List of running event names
+            merge_limit_seconds: Time limit for merging
+            
+        Returns:
+            True if events can be merged, False otherwise
+        """
+        # Find the last running event before current
+        last_running = self._find_last_running_event(events, start_idx, current_idx - 1, running_events)
+        
+        if not last_running:
+            return False
+        
+        current_event = events[current_idx]
+        
+        # Check if both events have valid date/time and are within merge limit
+        if (last_running.date_time and current_event.date_time):
+            time_diff = (current_event.date_time - last_running.date_time).total_seconds()
+            return time_diff <= merge_limit_seconds
+        
+        # If no datetime available, check total_time difference
+        time_diff_ms = current_event.total_time - last_running.total_time
+        time_diff_seconds = time_diff_ms / 1000.0
+        return time_diff_seconds <= merge_limit_seconds
+    
+    def _construct_entries_from_pairs(self, engine_pairs: List[tuple], flight_pairs: List[tuple]) -> List[Dict[str, Any]]:
+        """
+        Construct logbook entries by combining overlapping engine and flight pairs.
+        Based on the C++ Log2Logbook::ConstructEntries method.
+        
+        Args:
+            engine_pairs: List of (start, stop) engine event pairs
+            flight_pairs: List of (start, stop) flight event pairs
+            
+        Returns:
+            List of logbook entry data dictionaries
+        """
+        entries = []
+        
+        # Create copies of the lists as we'll be modifying them
+        remaining_engine_pairs = engine_pairs.copy()
+        remaining_flight_pairs = flight_pairs.copy()
+        
+        # Continue until all pairs are processed
+        while remaining_engine_pairs or remaining_flight_pairs:
+            entry_data = {
+                'engine_pairs': [],
+                'flight_pairs': []
+            }
+            
+            # Determine which pair to start with (earliest start time)
+            start_with_engine = False
+            if remaining_engine_pairs and remaining_flight_pairs:
+                engine_start_time = remaining_engine_pairs[0][0].total_time
+                flight_start_time = remaining_flight_pairs[0][0].total_time
+                start_with_engine = engine_start_time < flight_start_time
+            elif remaining_engine_pairs:
+                start_with_engine = True
+            
+            # Add the first pair to the entry
+            if start_with_engine and remaining_engine_pairs:
+                entry_data['engine_pairs'].append(remaining_engine_pairs.pop(0))
+            elif remaining_flight_pairs:
+                entry_data['flight_pairs'].append(remaining_flight_pairs.pop(0))
+            
+            # Keep adding overlapping pairs to this entry
+            overlap_found = True
+            while overlap_found:
+                overlap_found = False
+                
+                # Check for overlapping flight pairs
+                i = 0
+                while i < len(remaining_flight_pairs):
+                    if self._pair_overlaps_entry(remaining_flight_pairs[i], entry_data):
+                        entry_data['flight_pairs'].append(remaining_flight_pairs.pop(i))
+                        overlap_found = True
+                    else:
+                        i += 1
+                
+                # Check for overlapping engine pairs
+                i = 0
+                while i < len(remaining_engine_pairs):
+                    if self._pair_overlaps_entry(remaining_engine_pairs[i], entry_data):
+                        entry_data['engine_pairs'].append(remaining_engine_pairs.pop(i))
+                        overlap_found = True
+                    else:
+                        i += 1
+            
+            # Add the completed entry
+            entries.append(entry_data)
+        
+        return entries
+    
+    def _pair_overlaps_entry(self, pair: tuple, entry_data: Dict[str, Any]) -> bool:
+        """
+        Check if a pair overlaps with any pairs in the current entry.
+        
+        Args:
+            pair: (start_event, stop_event) tuple to check
+            entry_data: Current entry data with engine_pairs and flight_pairs
+            
+        Returns:
+            True if pair overlaps with entry, False otherwise
+        """
+        pair_start_time = pair[0].total_time
+        pair_stop_time = pair[1].total_time
+        
+        # Check overlap with engine pairs
+        for engine_pair in entry_data['engine_pairs']:
+            engine_start = engine_pair[0].total_time
+            engine_stop = engine_pair[1].total_time
+            
+            # Check for time overlap
+            if not (pair_stop_time < engine_start or pair_start_time > engine_stop):
+                return True
+        
+        # Check overlap with flight pairs
+        for flight_pair in entry_data['flight_pairs']:
+            flight_start = flight_pair[0].total_time
+            flight_stop = flight_pair[1].total_time
+            
+            # Check for time overlap
+            if not (pair_stop_time < flight_start or pair_start_time > flight_stop):
+                return True
+        
+        return False
+    
+    def _create_logbook_entry_from_constructed_data(self, device: Device, entry_data: Dict[str, Any]) -> bool:
+        """
+        Create a logbook entry from constructed entry data.
+        
+        Args:
+            device: Device instance
+            entry_data: Entry data with engine_pairs and flight_pairs
+            
+        Returns:
+            True if new entry was created, False if it already exists
+        """
+        try:
+            # Determine the overall time span of this entry
+            all_events = []
+            for engine_pair in entry_data['engine_pairs']:
+                all_events.extend([engine_pair[0], engine_pair[1]])
+            for flight_pair in entry_data['flight_pairs']:
+                all_events.extend([flight_pair[0], flight_pair[1]])
+            
+            if not all_events:
+                return False
+            
+            # Sort by total_time to get start and end
+            all_events.sort(key=lambda e: e.total_time)
+            start_event = all_events[0]
+            end_event = all_events[-1]
+            
+            # Calculate times based on flight pairs (primary) or engine pairs (fallback)
+            if entry_data['flight_pairs']:
+                # Use flight times
+                first_flight = min(entry_data['flight_pairs'], key=lambda p: p[0].total_time)
+                last_flight = max(entry_data['flight_pairs'], key=lambda p: p[1].total_time)
+                
+                takeoff_event = first_flight[0]
+                landing_event = last_flight[1]
+                
+                flight_duration_ms = landing_event.total_time - takeoff_event.total_time
+                flight_duration_hours = flight_duration_ms / (1000 * 60 * 60)
+                
+                # Count total landings
+                total_landings = len(entry_data['flight_pairs'])
+                
+            else:
+                # Use engine times as fallback
+                first_engine = min(entry_data['engine_pairs'], key=lambda p: p[0].total_time)
+                last_engine = max(entry_data['engine_pairs'], key=lambda p: p[1].total_time)
+                
+                takeoff_event = first_engine[0]
+                landing_event = last_engine[1]
+                
+                flight_duration_ms = landing_event.total_time - takeoff_event.total_time
+                flight_duration_hours = flight_duration_ms / (1000 * 60 * 60)
+                
+                total_landings = 0  # No flight data available
+            
+            # Create takeoff and landing datetime objects
+            if takeoff_event.date_time:
+                takeoff_datetime = takeoff_event.date_time
+                landing_datetime = takeoff_event.date_time + timedelta(milliseconds=flight_duration_ms)
+            else:
+                # Fallback to current date if no timestamp available
+                current_date = datetime.now(timezone.utc).date()
+                takeoff_datetime = datetime.combine(current_date, time(10, 0))
+                landing_datetime = takeoff_datetime + timedelta(hours=flight_duration_hours)
+            
+            # Check if logbook entry already exists
+            existing_entry = LogbookEntry.query.filter_by(
+                device_id=device.id,
+                takeoff_datetime=takeoff_datetime,
+                landing_datetime=landing_datetime
+            ).first()
+            
+            if existing_entry:
+                logger.debug(f"Logbook entry already exists for entry starting at {takeoff_event.total_time}ms")
+                return False
+            
+            # Create remarks describing the entry composition
+            remarks_parts = []
+            if entry_data['engine_pairs']:
+                remarks_parts.append(f"{len(entry_data['engine_pairs'])} engine period(s)")
+            if entry_data['flight_pairs']:
+                remarks_parts.append(f"{len(entry_data['flight_pairs'])} flight(s)")
+            
+            remarks = f"Generated from device events - {', '.join(remarks_parts)}"
+            if takeoff_event:
+                remarks += f" - Start: {takeoff_event.format_log_time()}"
+            if landing_event:
+                remarks += f", End: {landing_event.format_log_time()}"
+            
+            # Create logbook entry
+            # Extract pilot name from the message in the takeoff event, if available
+            pilot_name = None
+            if entry_data['flight_pairs']:
+                takeoff_event = entry_data['flight_pairs'][0][0]
+                if takeoff_event and takeoff_event.message:
+                    pilot_name = takeoff_event.message
+            elif entry_data['engine_pairs']:
+                takeoff_event = entry_data['engine_pairs'][0][0]
+                if takeoff_event and takeoff_event.message:
+                    pilot_name = takeoff_event.message
+            if not pilot_name:
+                pilot_name = 'UNKNOWN'
+
+                # If pilot_name contains '|', split into pilot and copilot
+                copilot_name = None
+                if pilot_name and '|' in pilot_name:
+                    names = pilot_name.split('|', 1)
+                    pilot_name = names[0].strip()
+                    copilot_name = names[1].strip()
+                else:
+                    copilot_name = None
+
+            logbook_entry = LogbookEntry(
+                takeoff_datetime=takeoff_datetime,
+                landing_datetime=landing_datetime,
+                aircraft_type=device.model or 'UNKNOWN',
+                aircraft_registration=device.registration or 'UNKNOWN',
+                departure_airport='UNKNOWN',
+                arrival_airport='UNKNOWN',
+                flight_time=round(flight_duration_hours, 2),
+                pilot_in_command_time=round(flight_duration_hours, 2),
+                dual_time=0.0,
+                instrument_time=0.0,
+                night_time=0.0,
+                cross_country_time=0.0,
+                landings_day=total_landings,
+                landings_night=0,
+                remarks=remarks,
+                pilot_name=pilot_name,
+                user_id=None,
+                device_id=device.id
+            )
+            
+            db.session.add(logbook_entry)
+            db.session.flush()  # Get the ID
+            
+            # Link all events to this logbook entry
+            for engine_pair in entry_data['engine_pairs']:
+                for event in [engine_pair[0], engine_pair[1]]:
+                    self._add_link_to_event(event, logbook_entry.id)
+            
+            for flight_pair in entry_data['flight_pairs']:
+                for event in [flight_pair[0], flight_pair[1]]:
+                    self._add_link_to_event(event, logbook_entry.id)
+            
+            logger.info(f"Created logbook entry from constructed data: {flight_duration_hours:.2f}h "
+                       f"with {len(entry_data['engine_pairs'])} engine pairs and "
+                       f"{len(entry_data['flight_pairs'])} flight pairs for device {device.name}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error creating logbook entry from constructed data: {str(e)}")
+            logger.debug(f"Entry data: {entry_data}")
+            raise
+    
+    def _add_link_to_event(self, event: Event, logbook_entry_id: int) -> None:
+        """
+        Link an event to a logbook entry.
+        
+        Args:
+            event: Event to link
+            logbook_entry_id: ID of the logbook entry to link to
+        """
+        try:
+            event.logbook_entry_id = logbook_entry_id
+        except Exception as e:
+            logger.warning(f"Could not link event {event.id} to logbook entry {logbook_entry_id}: {str(e)}")
+    
     
     def _build_flight_sequences(self, takeoff_events: List[Event], landing_events: List[Event]) -> List[Dict[str, Any]]:
         """
@@ -1359,7 +1777,14 @@ class ThingsBoardSyncService:
         }
         
         try:
-         
+            # Clear all events from the database
+            events = Event.query.all()
+            for event in events:
+                db.session.delete(event)
+                result['events_cleared'] += 1
+            
+            logger.info(f"Cleared {result['events_cleared']} events from database")
+            
             # Clear all event-generated logbook entries
             event_entries = LogbookEntry.query.filter(
                 LogbookEntry.remarks.like('%Generated from device events%')
@@ -1378,7 +1803,7 @@ class ThingsBoardSyncService:
             for device in devices:
                 if device.current_logger_page != 0:
                     device.current_logger_page = 0
-                    device.updated_at = datetime.utcnow()
+                    device.updated_at = datetime.now(timezone.utc)
                     devices_updated += 1
             
             result['devices_reset'] = devices_updated
@@ -1399,39 +1824,6 @@ class ThingsBoardSyncService:
             result['errors'].append(error_msg)
         
         return result
-
-    def _clean_duplicate_link_messages(self, message: str) -> str:
-        """
-        Clean up duplicate link messages from an event message.
-        
-        Args:
-            message: The original message string
-            
-        Returns:
-            Cleaned message with duplicate link messages removed
-        """
-        if not message:
-            return message
-            
-        import re
-        
-        # Find all unique logbook entry IDs mentioned in the message
-        pattern = r'Linked to Logbook Entry (\d+)'
-        matches = re.findall(pattern, message)
-        unique_ids = list(set(matches))
-        
-        # Remove all existing link messages
-        cleaned = re.sub(r'\[?Linked to Logbook Entry \d+\]?\s*', '', message).strip()
-        
-        # Add back unique link messages
-        if unique_ids:
-            link_messages = [f"[Linked to Logbook Entry {entry_id}]" for entry_id in sorted(unique_ids)]
-            if cleaned:
-                cleaned = f"{cleaned} {' '.join(link_messages)}"
-            else:
-                cleaned = ' '.join(link_messages)
-        
-        return cleaned
 
     def _create_logbook_entry_from_events(self, device: Device, flight_sequence: Dict[str, Any]) -> bool:
         """
@@ -1461,7 +1853,7 @@ class ThingsBoardSyncService:
                 landing_datetime = takeoff_event.date_time + timedelta(milliseconds=flight_duration_ms)
             else:
                 # Fallback to current date if no timestamp available
-                current_date = datetime.utcnow().date()
+                current_date = datetime.now(timezone.utc).date()
                 takeoff_datetime = datetime.combine(current_date, time(10, 0))  # Default 10:00 AM
                 
                 # Calculate landing datetime from duration
@@ -1494,9 +1886,8 @@ class ThingsBoardSyncService:
                 cross_country_time=0.0,
                 landings_day=len(landing_events),  # Total number of landings in sequence
                 landings_night=0,
-                remarks=f'Generated from device events - Takeoff: {takeoff_event.format_log_time()}, '
-                       f'Final Landing: {final_landing_event.format_log_time()}, '
-                       f'Total Landings: {len(landing_events)}',
+                remarks=f'Takeoff: {takeoff_event.format_log_time()}, '
+                       f'Landing: {final_landing_event.format_log_time()}',
                 pilot_name=None,  # Could be enhanced with pilot detection from events
                 user_id=None,  # Don't assign to any specific user - will be visible in device logbook
                 device_id=device.id  # Always link to device for visibility
@@ -1507,34 +1898,14 @@ class ThingsBoardSyncService:
             # Link events to logbook entry (we need to flush to get the ID)
             db.session.flush()
             
-            # Update events with logbook entry reference if the model supports it
-            # For now, we'll add this information to the remarks of existing events
+            # Update events with logbook entry reference
             try:
-                # Update takeoff event
-                link_message = f"Linked to Logbook Entry {logbook_entry.id}"
-                if takeoff_event.message:
-                    # Clean up any existing duplicate link messages first
-                    cleaned_message = self._clean_duplicate_link_messages(takeoff_event.message)
-                    # Check if this specific link message is already present
-                    if link_message not in cleaned_message:
-                        takeoff_event.message = f"{cleaned_message} [{link_message}]"
-                    else:
-                        takeoff_event.message = cleaned_message
-                else:
-                    takeoff_event.message = link_message
+                # Link takeoff event
+                self._add_link_to_event(takeoff_event, logbook_entry.id)
                 
-                # Update landing events
+                # Link landing events
                 for landing_event in landing_events:
-                    if landing_event.message:
-                        # Clean up any existing duplicate link messages first
-                        cleaned_message = self._clean_duplicate_link_messages(landing_event.message)
-                        # Check if this specific link message is already present
-                        if link_message not in cleaned_message:
-                            landing_event.message = f"{cleaned_message} [{link_message}]"
-                        else:
-                            landing_event.message = cleaned_message
-                    else:
-                        landing_event.message = link_message
+                    self._add_link_to_event(landing_event, logbook_entry.id)
                 
             except Exception as e:
                 logger.warning(f"Could not link events to logbook entry: {str(e)}")
@@ -1576,7 +1947,7 @@ class ThingsBoardSyncService:
             "method": "sendChecklist",
             "params": checklist_data,
             "persistent": True,  # Ensure the RPC call persists
-            "expirationTime": int((datetime.utcnow() + timedelta(days=3)).timestamp() * 1000)
+            "expirationTime": int((datetime.now(timezone.utc) + timedelta(days=3)).timestamp() * 1000)
         }
         
         headers = {

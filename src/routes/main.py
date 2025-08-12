@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, jsonify, current_app
 from flask_login import current_user
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 main_bp = Blueprint('main', __name__)
 
@@ -36,7 +36,7 @@ def health_check():
         
         return jsonify({
             'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'service': 'KanardiaCloud',
             'version': '1.0.0',
             'database': 'connected'
@@ -46,7 +46,7 @@ def health_check():
         current_app.logger.error(f"Health check failed: {str(e)}")
         return jsonify({
             'status': 'unhealthy',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'service': 'KanardiaCloud',
             'error': str(e)
         }), 503
@@ -71,7 +71,7 @@ def readiness_check():
         
         return jsonify({
             'status': 'ready',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'service': 'KanardiaCloud'
         }), 200
         
@@ -79,7 +79,7 @@ def readiness_check():
         current_app.logger.error(f"Readiness check failed: {str(e)}")
         return jsonify({
             'status': 'not_ready',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'service': 'KanardiaCloud',
             'error': str(e)
         }), 503

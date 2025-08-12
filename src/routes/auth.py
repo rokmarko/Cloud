@@ -2,7 +2,7 @@
 Authentication routes
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, current_user, login_required
 from flask_mail import Message
@@ -28,7 +28,7 @@ def login():
                 flash('Please verify your email address before logging in.', 'warning')
                 return redirect(url_for('auth.login'))
             
-            user.last_login = datetime.utcnow()
+            user.last_login = datetime.now(timezone.utc)
             db.session.commit()
             
             login_user(user, remember=form.remember_me.data)

@@ -2,7 +2,7 @@
 Database models for KanardiaCloud
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer
@@ -193,11 +193,11 @@ class Device(db.Model):
                 from flask import current_app
                 if current_app:
                     current_app.logger.warning(f"Invalid telemetry timestamp {telemetry_data.get('_timestamp')}: {e}")
-                self.last_telemetry_update = datetime.utcnow()
+                self.last_telemetry_update = datetime.now(timezone.utc)
         else:
-            self.last_telemetry_update = datetime.utcnow()
+            self.last_telemetry_update = datetime.now(timezone.utc)
             
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
     
     def _get_location_description(self, lat: float, lon: float) -> str:
         """
@@ -237,8 +237,14 @@ class Device(db.Model):
             return False
         
         from datetime import datetime, timedelta
-        threshold = datetime.utcnow() - timedelta(minutes=max_age_minutes)
-        return self.last_telemetry_update > threshold
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+        
+        # Handle timezone-naive datetime objects from old database records
+        last_update = self.last_telemetry_update
+        if last_update.tzinfo is None:
+            last_update = last_update.replace(tzinfo=timezone.utc)
+        
+        return last_update > threshold
     
     def get_telemetry_age(self) -> str:
         """
@@ -251,8 +257,14 @@ class Device(db.Model):
             return "No data"
         
         from datetime import datetime, timedelta
-        now = datetime.utcnow()
-        age = now - self.last_telemetry_update
+        now = datetime.now(timezone.utc)
+        
+        # Handle timezone-naive datetime objects from old database records
+        last_update = self.last_telemetry_update
+        if last_update.tzinfo is None:
+            last_update = last_update.replace(tzinfo=timezone.utc)
+        
+        age = now - last_update
         
         if age.total_seconds() < 60:
             return "Just now"
@@ -516,9 +528,11 @@ class Event(db.Model):
     
     # Foreign keys
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
+    logbook_entry_id = db.Column(db.Integer, db.ForeignKey('logbook_entry.id'), nullable=True)  # Link to associated logbook entry
     
     # Relationships
     device = db.relationship('Device', backref=db.backref('events', lazy='dynamic', cascade='all, delete-orphan'))
+    logbook_entry = db.relationship('LogbookEntry', backref=db.backref('linked_events', lazy='dynamic'))
     
     # Event bit definitions
     EVENT_BITS = {

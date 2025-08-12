@@ -159,39 +159,53 @@ def calculate_logbook_totals(user_id):
     # Get initial logbook time if it exists
     initial_time = InitialLogbookTime.query.filter_by(user_id=user_id).first()
     
+    # Get pilot mappings for this user to include mapped pilot flights
+    from src.models import Pilot
+    user_pilot_mappings = Pilot.query.filter_by(user_id=user_id, is_active=True).all()
+    user_pilot_names = [mapping.pilot_name for mapping in user_pilot_mappings]
+    
+    # Build base query for logbook entries
+    if user_pilot_names:
+        base_filter = db.or_(
+            LogbookEntry.user_id == user_id,
+            LogbookEntry.pilot_name.in_(user_pilot_names)
+        )
+    else:
+        base_filter = LogbookEntry.user_id == user_id
+    
     # Calculate sums from logbook entries
     if initial_time:
         # Only count entries after the effective date
         entry_totals = {
             'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).scalar() or 0,
             'total_landings': (
                 db.session.query(
                     db.func.sum(LogbookEntry.landings_day + LogbookEntry.landings_night)
                 ).filter(
-                    LogbookEntry.user_id == user_id,
+                    base_filter,
                     db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
                 ).scalar() or 0
             )
@@ -209,27 +223,27 @@ def calculate_logbook_totals(user_id):
             'has_initial_time': True,
             'initial_time': initial_time,
             'entries_count': LogbookEntry.query.filter(
-                LogbookEntry.user_id == user_id,
+                base_filter,
                 db.func.date(LogbookEntry.takeoff_datetime) >= initial_time.effective_date
             ).count()
         }
     else:
         # No initial time, just sum all entries
         totals = {
-            'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter_by(user_id=user_id).scalar() or 0,
-            'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter_by(user_id=user_id).scalar() or 0,
-            'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter_by(user_id=user_id).scalar() or 0,
-            'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter_by(user_id=user_id).scalar() or 0,
-            'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter_by(user_id=user_id).scalar() or 0,
-            'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter_by(user_id=user_id).scalar() or 0,
+            'total_time': db.session.query(db.func.sum(LogbookEntry.flight_time)).filter(base_filter).scalar() or 0,
+            'pic_time': db.session.query(db.func.sum(LogbookEntry.pilot_in_command_time)).filter(base_filter).scalar() or 0,
+            'dual_time': db.session.query(db.func.sum(LogbookEntry.dual_time)).filter(base_filter).scalar() or 0,
+            'instrument_time': db.session.query(db.func.sum(LogbookEntry.instrument_time)).filter(base_filter).scalar() or 0,
+            'night_time': db.session.query(db.func.sum(LogbookEntry.night_time)).filter(base_filter).scalar() or 0,
+            'cross_country_time': db.session.query(db.func.sum(LogbookEntry.cross_country_time)).filter(base_filter).scalar() or 0,
             'total_landings': (
                 db.session.query(
                     db.func.sum(LogbookEntry.landings_day + LogbookEntry.landings_night)
-                ).filter_by(user_id=user_id).scalar() or 0
+                ).filter(base_filter).scalar() or 0
             ),
             'has_initial_time': False,
             'initial_time': None,
-            'entries_count': LogbookEntry.query.filter_by(user_id=user_id).count()
+            'entries_count': LogbookEntry.query.filter(base_filter).count()
         }
     
     return totals
@@ -243,14 +257,29 @@ def index():
     device_count = Device.query.filter_by(user_id=current_user.id, is_active=True).count()
     checklist_count = Checklist.query.filter_by(user_id=current_user.id, is_active=True).count()
     instrument_layout_count = InstrumentLayout.query.filter_by(user_id=current_user.id, is_active=True).count()
-    logbook_count = LogbookEntry.query.filter_by(user_id=current_user.id).count()
+    
+    # Get pilot mappings for current user to find their pilot names
+    from src.models import Pilot
+    user_pilot_mappings = Pilot.query.filter_by(user_id=current_user.id, is_active=True).all()
+    user_pilot_names = [mapping.pilot_name for mapping in user_pilot_mappings]
+    
+    # Build query for logbook entries (including pilot mappings)
+    if user_pilot_names:
+        logbook_filter = db.or_(
+            LogbookEntry.user_id == current_user.id,
+            LogbookEntry.pilot_name.in_(user_pilot_names)
+        )
+    else:
+        logbook_filter = LogbookEntry.user_id == current_user.id
+    
+    logbook_count = LogbookEntry.query.filter(logbook_filter).count()
     
     # Get pilot mapping count (aircraft the user has access to)
     pilot_mapping_count = Pilot.query.filter_by(user_id=current_user.id, is_active=True)\
         .join(Device).filter(Device.is_active == True).count()
     
-    # Get recent logbook entries
-    recent_entries = LogbookEntry.query.filter_by(user_id=current_user.id)\
+    # Get recent logbook entries (including pilot mappings)
+    recent_entries = LogbookEntry.query.filter(logbook_filter)\
         .order_by(LogbookEntry.takeoff_datetime.desc()).limit(5).all()
     
     # Calculate total flight time using new function
@@ -860,8 +889,29 @@ def logbook():
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
-    entries = LogbookEntry.query.filter_by(user_id=current_user.id)\
-        .order_by(LogbookEntry.takeoff_datetime.desc())\
+    # Get entries where user is directly assigned OR where user is mapped as pilot
+    from src.models import Pilot
+    
+    # Get pilot mappings for current user to find their pilot names
+    user_pilot_mappings = Pilot.query.filter_by(user_id=current_user.id, is_active=True).all()
+    user_pilot_names = [mapping.pilot_name for mapping in user_pilot_mappings]
+    
+    # Build query for entries
+    query = LogbookEntry.query
+    
+    if user_pilot_names:
+        # Include entries directly assigned to user OR entries with user's pilot name
+        query = query.filter(
+            db.or_(
+                LogbookEntry.user_id == current_user.id,
+                LogbookEntry.pilot_name.in_(user_pilot_names)
+            )
+        )
+    else:
+        # No pilot mappings, just show directly assigned entries
+        query = query.filter_by(user_id=current_user.id)
+    
+    entries = query.order_by(LogbookEntry.takeoff_datetime.desc())\
         .paginate(page=page, per_page=per_page, error_out=False)
     
     # Calculate totals using new function
