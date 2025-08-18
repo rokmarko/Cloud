@@ -99,7 +99,15 @@
                                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
                                         {{ entry.aircraft_registration }}
                                     </td>
-                                    <td>{{ entry.departure_airport }} → {{ entry.arrival_airport }}</td>
+                                    <td>
+                                        <div>{{ entry.departure_airport }} → {{ entry.arrival_airport }}</div>
+                                        <small class="text-muted">
+                                            <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_takeoff</span>
+                                            {{ entry.takeoff_datetime.strftime('%H:%M') }}
+                                            <span class="material-icons mx-1" style="font-size: 0.7rem; vertical-align: middle;">flight_land</span>
+                                            {{ entry.landing_datetime.strftime('%H:%M') }}
+                                        </small>
+                                    </td>
                                     <td>
                                         <span class="badge" style="background: var(--kanardia-orange); color: white;">
                                             {{ "%.1f"|format(entry.flight_time) }}h

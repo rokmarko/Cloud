@@ -6,6 +6,8 @@ import requests
 import json
 import logging
 import os
+import base64
+import zlib
 from datetime import datetime, date, timedelta, time, timezone
 from typing import List, Dict, Any, Optional
 from src.app import db
@@ -584,12 +586,10 @@ class ThingsBoardSyncService:
                 
                 # Default takeoff time to 10:00 AM if not provided
                 if not takeoff_time:
-                    from datetime import time
                     takeoff_time = time(10, 0)
                 
                 # Calculate landing time from flight duration if not provided
                 if not landing_time:
-                    from datetime import datetime, timedelta
                     takeoff_dt = datetime.combine(entry_date, takeoff_time)
                     landing_dt = takeoff_dt + timedelta(hours=flight_time)
                     landing_time = landing_dt.time()
@@ -599,7 +599,6 @@ class ThingsBoardSyncService:
                 landing_datetime = datetime.combine(entry_date, landing_time)
             else:
                 # Calculate flight_time from takeoff and landing times
-                from datetime import datetime, timedelta
                 takeoff_datetime = datetime.combine(entry_date, takeoff_time)
                 landing_datetime = datetime.combine(entry_date, landing_time)
                 
@@ -722,8 +721,6 @@ class ThingsBoardSyncService:
         if not time_str:
             return None
         
-        from datetime import time
-        
         # Common time formats to try
         formats = [
             '%H:%M:%S',    # 10:30:00
@@ -817,7 +814,7 @@ class ThingsBoardSyncService:
                 device_id=device.external_device_id, 
                 method="syncEvents", 
                 params={
-                    'count': 5000,  # Adjust count as needed
+                    'count': 10000,  # Adjust count as needed
                     'last_event': device.current_logger_page or 0
                 }
             )
@@ -866,15 +863,6 @@ class ThingsBoardSyncService:
                             
                             remaining = int(additional_data.get('remaining', '0'))
                             logger.debug(f"Iteration {pump_iteration}: processed {len(additional_events)} events, {remaining} still remaining")
-                            
-                        elif isinstance(additional_data, list):
-                            # Process the list of events immediately
-                            if additional_data:
-                                batch_result = self._process_events(device, additional_data)
-                                result['new_events'] += batch_result['new_events']
-                                result['errors'].extend(batch_result['errors'])
-                                total_events_processed += len(additional_data)
-                            remaining = 0  # Assume no more if we get a list
                             
                         else:
                             logger.warning(f"Unexpected data format from getEvents API for device {device.name} on iteration {pump_iteration}")
@@ -981,8 +969,6 @@ class ThingsBoardSyncService:
             # If the response is a dict with a single key 'data', and the value is a string, try to decompress it
             if isinstance(data, dict) and 'data' in data and isinstance(data['data'], str):
                 try:
-                    import base64
-                    import zlib
                     compressed = base64.b64decode(data['data'])
                     # qCompress adds a 4-byte Qt header, skip it
                     decompressed = zlib.decompress(compressed[4:])
@@ -1138,14 +1124,14 @@ class ThingsBoardSyncService:
             result['errors'].append(error_msg)
             return result
     
-    def _build_logbook_entries_from_new_events(self, device: Device) -> Dict[str, Any]:
+    def _build_logbook_entries_from_new_events(self, device: Device, num_new_events: int = 0) -> Dict[str, Any]:
         """
-        Build logbook entries from the latest takeoff/landing event pairs (only new events).
-        This is more efficient than rebuilding the entire logbook.
+        Build logbook entries from recent engine and flight event pairs using the ConstructEntries approach.
+        This is more efficient than rebuilding the entire logbook as it only processes recent events.
         
         Args:
             device: Device instance
-            num_new_events: Number of new events that were just added
+            num_new_events: Number of new events that were just added (used to determine lookback window)
             
         Returns:
             Dict with results of logbook entry creation
@@ -1157,10 +1143,14 @@ class ThingsBoardSyncService:
         }
         
         try:
-          
+            # Calculate lookback limit based on new events, with reasonable bounds
+            # We look back at more events than just the new ones to ensure we can form complete pairs
+            lookback_limit = max(20, min(num_new_events * 3, 100))
+            
+            # Get recent events for this device, ordered by total_time
             recent_events = Event.query.filter_by(device_id=device.id)\
                 .order_by(Event.total_time.desc())\
-                .limit(20).all()
+                .limit(lookback_limit).all()
             
             if not recent_events:
                 logger.debug(f"No recent events found for device {device.name}")
@@ -1169,54 +1159,45 @@ class ThingsBoardSyncService:
             # Reverse to get chronological order for processing
             recent_events.reverse()
             
-            # Filter for takeoff and landing events in chronological order
-            takeoff_events = [e for e in recent_events if e.has_event_bit('Takeoff')]
-            landing_events = [e for e in recent_events if e.has_event_bit('Landing')]
+            logger.debug(f"Processing {len(recent_events)} recent events for device {device.name}")
             
-            logger.debug(f"Processing {len(takeoff_events)} takeoff and {len(landing_events)} landing events "
-                        f"from recent {len(recent_events)} events for device {device.name}")
+            # Create pairs for engine events (engine start/stop) from recent events
+            engine_pairs = self._search_event_pairs(
+                recent_events,
+                start_events=['EngineStart'],  # Engine start events
+                stop_events=['EngineStop'],    # Engine stop events
+                running_events=['EngRun1', 'EngRun2'],  # Engine running events
+                merge_limit_seconds=60  # Merge limit for engine events
+            )
             
-            if not takeoff_events or not landing_events:
-                logger.debug(f"No complete takeoff/landing pairs in recent events for device {device.name}")
+            # Create pairs for flight events (takeoff/landing) from recent events
+            flight_pairs = self._search_event_pairs(
+                recent_events,
+                start_events=['Takeoff'],      # Takeoff events
+                stop_events=['Landing'],       # Landing events
+                running_events=['Flying'],     # Flying events
+                merge_limit_seconds=120        # Merge limit for flight events
+            )
+            
+            logger.debug(f"Found {len(engine_pairs)} engine pairs and {len(flight_pairs)} flight pairs "
+                        f"from recent events for device {device.name}")
+            
+            if not engine_pairs and not flight_pairs:
+                logger.debug(f"No engine or flight pairs found in recent events for device {device.name}")
                 return result
             
-            # Build flight sequences from recent events
-            flight_sequences = self._build_flight_sequences(takeoff_events, landing_events)
+            # Construct logbook entries by combining overlapping pairs
+            logbook_entries = self._construct_entries_from_pairs(engine_pairs, flight_pairs)
             
-            logger.debug(f"Built {len(flight_sequences)} flight sequences from recent events for device {device.name}")
+            logger.debug(f"Constructed {len(logbook_entries)} logbook entries from recent events for device {device.name}")
             
-            # Only create logbook entries that don't already exist
-            for sequence in flight_sequences:
+            # Only create database entries that don't already exist
+            for entry_data in logbook_entries:
                 try:
-                    # Check if this sequence already has a logbook entry
-                    takeoff_event = sequence['takeoff_event']
-                    final_landing_event = sequence['landing_events'][-1]
-                    
-                    # Calculate expected takeoff/landing times for duplicate check
-                    if takeoff_event.date_time:
-                        takeoff_datetime = takeoff_event.date_time
-                        flight_duration_ms = final_landing_event.total_time - takeoff_event.total_time
-                        landing_datetime = takeoff_datetime + timedelta(milliseconds=flight_duration_ms)
-                    else:
-                        # Skip sequences without datetime info
-                        continue
-                    
-                    # Check if logbook entry already exists for this sequence
-                    existing_entry = LogbookEntry.query.filter_by(
-                        device_id=device.id,
-                        takeoff_datetime=takeoff_datetime,
-                        landing_datetime=landing_datetime
-                    ).first()
-                    
-                    if not existing_entry:
-                        if self._create_logbook_entry_from_events(device, sequence):
-                            result['new_entries'] += 1
-                            logger.debug(f"Created new logbook entry from recent events for device {device.name}")
-                    else:
-                        logger.debug(f"Logbook entry already exists for sequence starting at {takeoff_event.total_time}ms")
-                        
+                    if self._create_logbook_entry_from_constructed_data(device, entry_data):
+                        result['new_entries'] += 1
                 except Exception as e:
-                    error_msg = f"Failed to create logbook entry from recent events: {str(e)}"
+                    error_msg = f"Failed to create logbook entry from recent constructed data: {str(e)}"
                     logger.error(error_msg)
                     result['errors'].append(error_msg)
             
@@ -1595,6 +1576,11 @@ class ThingsBoardSyncService:
                 takeoff_datetime = datetime.combine(current_date, time(10, 0))
                 landing_datetime = takeoff_datetime + timedelta(hours=flight_duration_hours)
             
+            # Do not create a logbook entry if flight duration is less than 60 seconds
+            if flight_duration_ms < 60000:
+                logger.info(f"Skipping logbook entry creation: flight duration {flight_duration_ms} ms is less than 60 seconds")
+                return False
+
             # Check if logbook entry already exists
             existing_entry = LogbookEntry.query.filter_by(
                 device_id=device.id,
@@ -1613,7 +1599,7 @@ class ThingsBoardSyncService:
             if entry_data['flight_pairs']:
                 remarks_parts.append(f"{len(entry_data['flight_pairs'])} flight(s)")
             
-            remarks = f"Generated from device events - {', '.join(remarks_parts)}"
+            remarks = f"{', '.join(remarks_parts)}"
             if takeoff_event:
                 remarks += f" - Start: {takeoff_event.format_log_time()}"
             if landing_event:

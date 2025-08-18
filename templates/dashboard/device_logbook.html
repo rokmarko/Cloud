@@ -163,8 +163,20 @@
                                 <span class="text-muted">Unknown</span>
                             {% endif %}
                         </td>
-                        <td>{{ entry.departure_airport }}</td>
-                        <td>{{ entry.arrival_airport }}</td>
+                        <td>
+                            <div>{{ entry.departure_airport }}</div>
+                            <small class="text-muted">
+                                <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_takeoff</span>
+                                {{ entry.takeoff_datetime.strftime('%H:%M') }}
+                            </small>
+                        </td>
+                        <td>
+                            <div>{{ entry.arrival_airport }}</div>
+                            <small class="text-muted">
+                                <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_land</span>
+                                {{ entry.landing_datetime.strftime('%H:%M') }}
+                            </small>
+                        </td>
                         <td>
                             {{ entry.aircraft_registration }}
                             {% if entry.aircraft_type %}

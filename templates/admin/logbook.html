@@ -122,8 +122,20 @@
                                         <strong>{{ entry.aircraft_registration or 'N/A' }}</strong><br>
                                         <small class="text-muted">{{ entry.aircraft_type or 'Unknown' }}</small>
                                     </td>
-                                    <td>{{ entry.departure_airport or 'N/A' }}</td>
-                                    <td>{{ entry.arrival_airport or 'N/A' }}</td>
+                                    <td>
+                                        <div>{{ entry.departure_airport or 'N/A' }}</div>
+                                        <small class="text-muted">
+                                            <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_takeoff</span>
+                                            {{ entry.takeoff_datetime.strftime('%H:%M') }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <div>{{ entry.arrival_airport or 'N/A' }}</div>
+                                        <small class="text-muted">
+                                            <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_land</span>
+                                            {{ entry.landing_datetime.strftime('%H:%M') }}
+                                        </small>
+                                    </td>
                                     <td>{{ "%.2f"|format(entry.flight_time or 0) }}h</td>
                                     <td>
                                         {% if entry.pilot_name %}

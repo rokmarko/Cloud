@@ -141,9 +141,19 @@
                                 <span class="badge bg-secondary">{{ entry.aircraft_type }}</span>
                             </td>
                             <td>
-                                <span class="text-primary">{{ entry.departure_airport }}</span>
-                                <span class="material-icons mx-1" style="font-size: 0.8rem; vertical-align: middle;">arrow_forward</span>
-                                <span class="text-success">{{ entry.arrival_airport }}</span>
+                                <div>
+                                    <span class="text-primary">{{ entry.departure_airport }}</span>
+                                    <span class="material-icons mx-1" style="font-size: 0.8rem; vertical-align: middle;">arrow_forward</span>
+                                    <span class="text-success">{{ entry.arrival_airport }}</span>
+                                </div>
+                                <div>
+                                    <small class="text-muted">
+                                        <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_takeoff</span>
+                                        {{ entry.takeoff_datetime.strftime('%H:%M') }}
+                                        <span class="material-icons mx-1" style="font-size: 0.7rem; vertical-align: middle;">flight_land</span>
+                                        {{ entry.landing_datetime.strftime('%H:%M') }}
+                                    </small>
+                                </div>
                             </td>
                             <td>
                                 {% if entry.pilot_name %}
