@@ -125,7 +125,7 @@
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item" href="#" onclick="renameInstrumentLayout({{ layout.id }})">
+                                    <a class="dropdown-item" href="#" onclick="renameInstrumentLayout({{ layout.id }}, '{{ layout.title }}', '{{ layout.description or '' }}')">
                                         <span class="material-icons me-2">edit</span> Rename
                                     </a>
                                 </li>
@@ -153,6 +153,43 @@
         </a>
     </div>
 {% endif %}
+
+<!-- Rename Layout Modal -->
+<div class="modal fade" id="renameLayoutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">edit</span>
+                    Edit Instrument Layout
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="renameLayoutForm">
+                    <input type="hidden" id="renameLayoutId" value="">
+                    <div class="mb-3">
+                        <label for="renameLayoutTitle" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="renameLayoutTitle" required maxlength="200" placeholder="Enter layout title...">
+                    </div>
+                    <div class="mb-3">
+                        <label for="renameLayoutDescription" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="renameLayoutDescription" rows="3" maxlength="500" placeholder="Describe the purpose or configuration of this instrument layout..."></textarea>
+                        <div class="form-text">Optional description to help identify and organize your instrument layouts</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span class="material-icons me-1">close</span> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="submitRenameLayout()">
+                    <span class="material-icons me-1">save</span> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 let currentLayoutId = null;
@@ -668,37 +705,63 @@ function deleteInstrumentLayout(layoutId) {
 /**
  * Rename an instrument layout
  * @param {number} layoutId - The ID of the layout to rename
+ * @param {string} currentTitle - The current title of the layout
+ * @param {string} currentDescription - The current description of the layout
  */
-function renameInstrumentLayout(layoutId) {
-    const newTitle = prompt('Enter new layout title:');
-    if (newTitle && newTitle.trim()) {
-        // Get CSRF token from meta tag
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        
-        fetch(`/dashboard/api/instrument-layout/${layoutId}/rename`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                title: newTitle.trim()
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            location.reload();
-        })
-        .catch(error => {
-            console.error('Error renaming instrument layout:', error);
-            alert('Error renaming instrument layout. Please try again.');
-        });
+function renameInstrumentLayout(layoutId, currentTitle, currentDescription = '') {
+    // Set modal values
+    document.getElementById('renameLayoutId').value = layoutId;
+    document.getElementById('renameLayoutTitle').value = currentTitle;
+    document.getElementById('renameLayoutDescription').value = currentDescription;
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('renameLayoutModal'));
+    modal.show();
+}
+
+/**
+ * Submit the rename layout form
+ */
+function submitRenameLayout() {
+    const layoutId = document.getElementById('renameLayoutId').value;
+    const title = document.getElementById('renameLayoutTitle').value;
+    const description = document.getElementById('renameLayoutDescription').value;
+    
+    if (!title.trim()) {
+        alert('Please enter a title for the layout.');
+        return;
     }
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    fetch(`/dashboard/api/instrument-layout/${layoutId}/rename`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            title: title.trim(),
+            description: description.trim()
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Hide modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('renameLayoutModal'));
+        modal.hide();
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error renaming instrument layout:', error);
+        alert('Error renaming instrument layout. Please try again.');
+    });
 }
 </script>
 

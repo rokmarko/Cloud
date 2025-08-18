@@ -87,8 +87,9 @@ class ChecklistForm(FlaskForm):
 
 
 class ChecklistCreateForm(FlaskForm):
-    """Simplified checklist creation form - only title required."""
+    """Simplified checklist creation form - title and description."""
     title = StringField('Checklist Title', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description (Optional)', validators=[Optional(), Length(max=500)])
     submit = SubmitField('Create Checklist')
 
 
@@ -118,8 +119,9 @@ class InstrumentLayoutForm(FlaskForm):
 
 
 class InstrumentLayoutCreateForm(FlaskForm):
-    """Simplified instrument layout creation form - only title required."""
+    """Simplified instrument layout creation form - title, description, and instrument type."""
     title = StringField('Layout Title', validators=[DataRequired(), Length(max=200)])
+    description = TextAreaField('Description (Optional)', validators=[Optional(), Length(max=500)])
     instrument_type = SelectField('Instrument Type', choices=[
         ('digi', 'Digi'),
         ('indu_57mm', 'Indu 57mm'),

@@ -103,6 +103,43 @@
     </div>
 </div>
 
+<!-- Rename Checklist Modal -->
+<div class="modal fade" id="renameChecklistModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">edit</span>
+                    Edit Checklist
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="renameChecklistForm">
+                    <input type="hidden" id="renameChecklistId" value="">
+                    <div class="mb-3">
+                        <label for="renameChecklistTitle" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="renameChecklistTitle" required maxlength="200" placeholder="Enter checklist title...">
+                    </div>
+                    <div class="mb-3">
+                        <label for="renameChecklistDescription" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="renameChecklistDescription" rows="3" maxlength="500" placeholder="Describe the purpose or usage of this checklist..."></textarea>
+                        <div class="form-text">Optional description to help identify and organize your checklists</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span class="material-icons me-1">close</span> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="submitRenameChecklist()">
+                    <span class="material-icons me-1">save</span> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% if checklists %}
     <div class="row g-4">
         {% for checklist in checklists %}
@@ -149,7 +186,7 @@
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <a class="dropdown-item" href="#" onclick="renameChecklist({{ checklist.id }}, '{{ checklist.title }}')">
+                                    <a class="dropdown-item" href="#" onclick="renameChecklist({{ checklist.id }}, '{{ checklist.title }}', '{{ checklist.description or '' }}')">
                                         <span class="material-icons me-2">edit</span> Rename
                                     </a>
                                 </li>
@@ -491,36 +528,63 @@ function deleteChecklist(checklistId) {
     }
 }
 
-function renameChecklist(checklistId) {
-    const newTitle = prompt('Enter new checklist title:');
-    if (newTitle && newTitle.trim()) {
-        // Get CSRF token from meta tag
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        
-        fetch(`/dashboard/api/checklist/${checklistId}/rename`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                title: newTitle.trim()
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            location.reload();
-        })
-        .catch(error => {
-            console.error('Error renaming checklist:', error);
-            alert('Error renaming checklist. Please try again.');
-        });
+function renameChecklist(checklistId, currentTitle = '', currentDescription = '') {
+    // Get current values from the page
+    const checklistCard = document.querySelector(`[data-checklist-id="${checklistId}"]`);
+    if (checklistCard) {
+        const titleElement = checklistCard.querySelector('.card-title');
+        const descElement = checklistCard.querySelector('.text-muted');
+        currentTitle = titleElement ? titleElement.textContent.trim() : currentTitle;
+        currentDescription = descElement ? descElement.textContent.replace('Description: ', '').trim() : currentDescription;
     }
+    
+    // Show rename modal
+    document.getElementById('renameChecklistTitle').value = currentTitle;
+    document.getElementById('renameChecklistDescription').value = currentDescription || '';
+    document.getElementById('renameChecklistId').value = checklistId;
+    
+    const modal = new bootstrap.Modal(document.getElementById('renameChecklistModal'));
+    modal.show();
+}
+
+function submitRenameChecklist() {
+    const checklistId = document.getElementById('renameChecklistId').value;
+    const newTitle = document.getElementById('renameChecklistTitle').value.trim();
+    const newDescription = document.getElementById('renameChecklistDescription').value.trim();
+    
+    if (!newTitle) {
+        alert('Title cannot be empty');
+        return;
+    }
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    fetch(`/dashboard/api/checklist/${checklistId}/rename`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            title: newTitle,
+            description: newDescription
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        bootstrap.Modal.getInstance(document.getElementById('renameChecklistModal')).hide();
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Error updating checklist:', error);
+        alert('Error updating checklist. Please try again.');
+    });
 }
 
 let currentChecklistToSend = null;

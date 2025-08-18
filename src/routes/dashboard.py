@@ -580,7 +580,7 @@ def add_checklist():
         
         checklist = Checklist(
             title=form.title.data,
-            description="",
+            description=form.description.data or "",
             items=json.dumps([]),  # Empty items for now
             json_content=json.dumps(default_template),
             user_id=current_user.id
@@ -681,21 +681,6 @@ def load_checklist(checklist_id):
     """Load checklist json_content for editing."""
     checklist = Checklist.query.filter_by(id=checklist_id, user_id=current_user.id).first_or_404()
     
-    # Parse the JSON content from the database and return as object
-    # try:
-    #     json_data = json.loads(checklist.json_content) if checklist.json_content else {}
-    # except (json.JSONDecodeError, TypeError):
-    #     # If parsing fails, return empty default structure
-    #     json_data = {
-    #         "Language": "en-us",
-    #         "Voice": "Linda",
-    #         "Root": {
-    #             "Type": 0,
-    #             "Name": "Root",
-    #             "Children": []
-    #         }
-    #     }
-
     reply = { 
         "data": checklist.json_content,
         "title": checklist.title
@@ -741,7 +726,17 @@ def add_instrument_layout():
             attr_type=False
         ).decode('utf-8')
 
-        xml_content = xml_content.replace('<indu>', '<indu instrument="Digi" model="I">', 1)
+        switch = form.instrument_type.data.lower()
+        instrument_map = {
+            'indu_57mm': ('Indu', '57'),
+            'indu_80mm': ('Indu', '80'),
+            'altimeter_80mm': ('Indu', 'Altimeter 80'),
+        }
+        instrument, model = instrument_map.get(switch, ('Digi', 'I'))
+
+        xml_content = xml_content.replace(
+            '<indu>', f'<indu instrument="{instrument}" model="{model}">', 1
+        )
         # import xml.dom.minidom
         # Pretty-print the XML for logging/debugging
         # pretty_xml = xml.dom.minidom.parseString(xml_content).toprettyxml(indent="  ")
@@ -749,7 +744,7 @@ def add_instrument_layout():
 
         layout = InstrumentLayout(
             title=form.title.data,
-            description="",
+            description=form.description.data or "",
             instrument_type=form.instrument_type.data,
             layout_data=json.dumps([]),  # Empty data for now
             xml_content=xml_content,
@@ -1182,7 +1177,7 @@ def api_delete_checklist(checklist_id):
 @dashboard_bp.route('/api/checklist/<int:checklist_id>/rename', methods=['POST'])
 @login_required
 def api_rename_checklist(checklist_id):
-    """Rename a checklist."""
+    """Rename a checklist and update description."""
     checklist = Checklist.query.filter_by(
         id=checklist_id, 
         user_id=current_user.id, 
@@ -1191,6 +1186,7 @@ def api_rename_checklist(checklist_id):
     
     request_data = request.get_json()
     new_title = request_data.get('title', '').strip()
+    new_description = request_data.get('description', '').strip()
     
     if not new_title:
         return jsonify({
@@ -1204,14 +1200,22 @@ def api_rename_checklist(checklist_id):
             'message': 'Title cannot exceed 200 characters'
         }), 400
     
+    if len(new_description) > 500:
+        return jsonify({
+            'success': False,
+            'message': 'Description cannot exceed 500 characters'
+        }), 400
+    
     checklist.title = new_title
+    checklist.description = new_description
     checklist.updated_at = db.func.now()
     db.session.commit()
     
     return jsonify({
         'success': True,
-        'message': 'Checklist renamed successfully',
-        'new_title': new_title
+        'message': 'Checklist updated successfully',
+        'new_title': new_title,
+        'new_description': new_description
     })
 
 
@@ -1476,7 +1480,7 @@ def api_delete_instrument_layout(layout_id):
 @dashboard_bp.route('/api/instrument-layout/<int:layout_id>/rename', methods=['POST'])
 @login_required
 def api_rename_instrument_layout(layout_id):
-    """Rename an instrument layout."""
+    """Rename an instrument layout and update description."""
     layout = InstrumentLayout.query.filter_by(
         id=layout_id, 
         user_id=current_user.id, 
@@ -1485,6 +1489,7 @@ def api_rename_instrument_layout(layout_id):
     
     request_data = request.get_json()
     new_title = request_data.get('title', '').strip()
+    new_description = request_data.get('description', '').strip()
     
     if not new_title:
         return jsonify({
@@ -1498,13 +1503,21 @@ def api_rename_instrument_layout(layout_id):
             'message': 'Title cannot exceed 200 characters'
         }), 400
     
+    if len(new_description) > 500:
+        return jsonify({
+            'success': False,
+            'message': 'Description cannot exceed 500 characters'
+        }), 400
+    
     layout.title = new_title
+    layout.description = new_description
     db.session.commit()
     
     return jsonify({
         'success': True,
-        'message': 'Instrument layout renamed successfully',
-        'new_title': new_title
+        'message': 'Instrument layout updated successfully',
+        'new_title': new_title,
+        'new_description': new_description
     })
 
 
