@@ -19,6 +19,8 @@
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ url_for('admin.test_email') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        
                         <div class="mb-3">
                             <label for="recipient_email" class="form-label">
                                 <span class="material-icons me-2">person</span>Recipient Email Address

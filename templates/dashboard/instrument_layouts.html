@@ -240,6 +240,7 @@ function openInstrumentLayoutEditor(layoutId, layoutTitle) {
     
     // Show loading indicator
     showLoadingIndicator();
+    hideLoadingIndicator();
 
     // Add event listener for iframe messages
     window.addEventListener('message', handleEditorMessage);
@@ -252,7 +253,7 @@ function openInstrumentLayoutEditor(layoutId, layoutTitle) {
     // Show the modal
     modalInstance = new bootstrap.Modal(document.getElementById('instrumentLayoutEditorModal'));
     modalInstance.show();
-   
+
     // Handle modal close event to cleanup
     const modalElement = document.getElementById('instrumentLayoutEditorModal');
     modalElement.addEventListener('hidden.bs.modal', function onModalHidden() {
