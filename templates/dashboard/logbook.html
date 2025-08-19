@@ -65,13 +65,13 @@
         <div class="flex-grow-1">
             <h6 class="mb-1">Initial Logbook Time Set</h6>
             <p class="mb-1">
-                <strong>Effective Date:</strong> {{ totals.initial_time.effective_date.strftime('%B %d, %Y') }} 
+                <strong>Effective Date:</strong> {{ totals.initial_time.effective_date.strftime(current_user.date_format) }} 
                 <span class="text-muted">|</span>
                 <strong>Initial Total:</strong> {{ "%.1f"|format(totals.initial_time.total_time) }} hours
             </p>
             <small class="text-muted">
                 Totals above include {{ "%.1f"|format(totals.initial_time.total_time) }} hours from before the effective date.
-                Only entries on or after {{ totals.initial_time.effective_date.strftime('%m/%d/%Y') }} are counted.
+                Only entries on or after {{ totals.initial_time.effective_date.strftime(current_user.date_format) }} are counted.
             </small>
         </div>
         <a href="{{ url_for('dashboard.initial_logbook_time') }}" class="btn btn-outline-primary btn-sm">
@@ -126,7 +126,7 @@
                         {% for entry in entries.items %}
                         <tr>
                             <td>
-                                <strong>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</strong>
+                                <strong>{{ entry.takeoff_datetime.strftime(current_user.date_format) }}</strong>
                             </td>
                             <td>
                                 <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
