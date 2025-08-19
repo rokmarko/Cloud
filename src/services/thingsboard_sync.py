@@ -207,7 +207,7 @@ class ThingsBoardSyncService:
         
         return results
     
-    def _is_device_active_in_thingsboard(self, device_id: str) -> bool:
+    def _thing_is_device_active(self, device_id: str) -> bool:
         """
         Check if device is active in ThingsBoard using telemetry API.
         
@@ -232,10 +232,7 @@ class ThingsBoardSyncService:
             'X-Authorization': f'Bearer {jwt_token}',
             'User-Agent': 'KanardiaCloud/1.0'
         }
-        
-        # Add query parameter to get only the 'active' attribute
-        # params = {'keys': 'active'}
-        
+                
         try:
             logger.debug(f"Checking device activity status for device {device_id}")
             
@@ -348,7 +345,7 @@ class ThingsBoardSyncService:
             if telemetry_timestamps:
                 try:
                     # Find the most recent timestamp among all telemetry values
-                    latest_ts = max(telemetry_timestamps.values())
+                    latest_ts = min(telemetry_timestamps.values())
                     telemetry['_timestamp'] = latest_ts
                 except (ValueError, TypeError) as e:
                     logger.warning(f"Could not determine latest timestamp: {e}")
@@ -423,7 +420,7 @@ class ThingsBoardSyncService:
         
         try:
             # First check if device is active in ThingsBoard
-            if not self._is_device_active_in_thingsboard(device.external_device_id):
+            if not self._thing_is_device_active(device.external_device_id):
                 logger.info(f"Device {device.name} is not active in ThingsBoard, skipping events RPC call")
                 return None
  
@@ -805,7 +802,7 @@ class ThingsBoardSyncService:
         
         try:
             # First check if device is active in ThingsBoard
-            if not self._is_device_active_in_thingsboard(device.external_device_id):
+            if not self._thing_is_device_active(device.external_device_id):
                 logger.info(f"Device {device.name} is not active in ThingsBoard, skipping events RPC call")
                 return None
         
@@ -869,11 +866,11 @@ class ThingsBoardSyncService:
                             break
                         
                         # Safety checks to prevent infinite loops
-                        if total_events_processed > 100000:  # Arbitrary large limit
+                        if total_events_processed > 20000:  # Arbitrary large limit
                             logger.warning(f"Reached safety limit of {total_events_processed} events for device {device.name}, stopping")
                             break
                         
-                        if pump_iteration > 100:  # Prevent infinite pumping
+                        if pump_iteration > 20:  # Prevent infinite pumping
                             logger.warning(f"Reached maximum pump iterations ({pump_iteration}) for device {device.name}, stopping")
                             break
                             
@@ -1619,22 +1616,22 @@ class ThingsBoardSyncService:
             if not pilot_name:
                 pilot_name = 'UNKNOWN'
 
-                # If pilot_name contains '|', split into pilot and copilot
+            # If pilot_name contains '|', split into pilot and copilot
+            copilot_name = None
+            if pilot_name and '|' in pilot_name:
+                names = pilot_name.split('|', 1)
+                pilot_name = names[0].strip()
+                copilot_name = names[1].strip()
+            else:
                 copilot_name = None
-                if pilot_name and '|' in pilot_name:
-                    names = pilot_name.split('|', 1)
-                    pilot_name = names[0].strip()
-                    copilot_name = names[1].strip()
-                else:
-                    copilot_name = None
 
             logbook_entry = LogbookEntry(
                 takeoff_datetime=takeoff_datetime,
                 landing_datetime=landing_datetime,
                 aircraft_type=device.model or 'UNKNOWN',
                 aircraft_registration=device.registration or 'UNKNOWN',
-                departure_airport='UNKNOWN',
-                arrival_airport='UNKNOWN',
+                departure_airport='UNKN',
+                arrival_airport='UNKN',
                 flight_time=round(flight_duration_hours, 2),
                 pilot_in_command_time=round(flight_duration_hours, 2),
                 dual_time=0.0,

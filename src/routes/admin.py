@@ -411,7 +411,7 @@ def test_device_activity():
         
         results = []
         for device in devices:
-            is_active = thingsboard_sync._is_device_active_in_thingsboard(device.external_device_id)
+            is_active = thingsboard_sync._thing_is_device_active(device.external_device_id)
             results.append(f"Device {device.name} (ID: {device.external_device_id}): {'ACTIVE' if is_active else 'INACTIVE'}")
             current_app.logger.info(f"Device activity check: {device.name} ({device.external_device_id}) -> {is_active}")
         

@@ -113,13 +113,13 @@
                                 <div class="col-12 mb-2">
                                     <span class="badge 
                                         {% if device.status_description == 'Airborne' %}bg-warning
-                                        {% elif device.status_description == 'Engine Running' %}bg-info
+                                        {% elif device.status_description == 'Engine' %}bg-info
                                         {% elif device.status_description == 'Parked' %}bg-secondary
                                         {% else %}bg-light text-dark
                                         {% endif %}">
                                         {% if device.status_description == 'Airborne' %}
                                             <i class="bi bi-airplane"></i>
-                                        {% elif device.status_description == 'Engine Running' %}
+                                        {% elif device.status_description == 'Engine' %}
                                             <i class="bi bi-gear"></i>
                                         {% elif device.status_description == 'Parked' %}
                                             <i class="bi bi-pause-circle"></i>

@@ -175,28 +175,10 @@ class Device(db.Model):
         
         # Update timestamp - use telemetry timestamp if available, otherwise current time
         if '_timestamp' in telemetry_data:
-            try:
-                # Convert milliseconds timestamp to datetime
-                import datetime as dt
-                ts_value = telemetry_data['_timestamp']
-                
-                # Ensure timestamp is numeric
-                if isinstance(ts_value, str):
-                    ts_value = float(ts_value)
-                elif isinstance(ts_value, int):
-                    ts_value = float(ts_value)
-                
-                # Convert from milliseconds to seconds for datetime.fromtimestamp
-                telemetry_timestamp = dt.datetime.fromtimestamp(ts_value / 1000)
-                self.last_telemetry_update = telemetry_timestamp
-            except (ValueError, TypeError, OSError) as e:
-                # If timestamp conversion fails, use current time
-                from flask import current_app
-                if current_app:
-                    current_app.logger.warning(f"Invalid telemetry timestamp {telemetry_data.get('_timestamp')}: {e}")
-                self.last_telemetry_update = datetime.now(timezone.utc)
-        else:
-            self.last_telemetry_update = datetime.now(timezone.utc)
+            ts_value = telemetry_data['_timestamp']
+            # Convert from milliseconds to seconds for datetime.fromtimestamp
+            telemetry_timestamp = datetime.fromtimestamp(ts_value / 1000, tz=timezone.utc)
+            self.last_telemetry_update = telemetry_timestamp
             
         self.updated_at = datetime.now(timezone.utc)
     
