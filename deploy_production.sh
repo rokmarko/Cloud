@@ -14,12 +14,14 @@ NC='\033[0m' # No Color
 
 # Configuration
 APP_NAME="kanardiacloud"
-APP_DIR="/home/rok/src/Cloud-1"
-VENV_DIR="/home/rok/Branch/NavSync/Protected/Cloud/venv"
+APP_DIR="/home/rok/Cloud"
+VENV_DIR="/home/rok/Cloud/.venv"
 LOG_DIR="/var/log/$APP_NAME"
 RUN_DIR="/var/run/$APP_NAME"
-USER="www-data"
-GROUP="www-data"
+#USER="www-data"
+#GROUP="www-data"
+USER="rok"
+GROUP="rok"
 
 echo -e "${BLUE}=== KanardiaCloud Production Deployment ===${NC}"
 

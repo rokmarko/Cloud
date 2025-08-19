@@ -6,13 +6,13 @@ Wants=network.target
 
 [Service]
 Type=notify
-User=www-data
-Group=www-data
-WorkingDirectory=/home/rok/src/Cloud-1
-Environment=PATH=/home/rok/Branch/NavSync/Protected/Cloud/venv/bin
+User=rok
+Group=rok
+WorkingDirectory=/home/rok/Cloud
+Environment=PATH=/home/rok/Cloud/.venv/bin
 Environment=FLASK_ENV=production
 Environment=FLASK_DEBUG=0
-ExecStart=/home/rok/Branch/NavSync/Protected/Cloud/venv/bin/gunicorn --config gunicorn.conf.py wsgi:app
+ExecStart=/home/rok/Cloud/.venv/bin/gunicorn --config gunicorn.conf.py wsgi:app
 ExecReload=/bin/kill -s HUP $MAINPID
 ExecStop=/bin/kill -s TERM $MAINPID
 Restart=always
@@ -26,7 +26,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/home/rok/src/Cloud-1/instance
+ReadWritePaths=/home/rok/Cloud/instance
 ReadWritePaths=/var/log/kanardiacloud
 ReadWritePaths=/var/run/kanardiacloud
 

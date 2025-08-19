@@ -8,7 +8,7 @@ import multiprocessing
 import os
 
 # Basic settings
-bind = "127.0.0.1:8000"
+bind = "127.0.0.1:5000"
 workers = multiprocessing.cpu_count() * 2 + 1
 worker_class = "sync"
 worker_connections = 1000
