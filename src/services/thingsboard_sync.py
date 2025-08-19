@@ -400,61 +400,6 @@ class ThingsBoardSyncService:
             db.session.rollback()
             return False
     
-    def sync_device(self, device: Device) -> Dict[str, Any]:
-        """
-        Sync logbook entries for a specific device.
-        
-        Args:
-            device: Device model instance with external_device_id
-            
-        Returns:
-            Dict with sync results for this device
-        """
-        result = {
-            'device_id': device.id,
-            'external_device_id': device.external_device_id,
-            'total_entries': 0,
-            'new_entries': 0,
-            'errors': []
-        }
-        
-        try:
-            # First check if device is active in ThingsBoard
-            if not self._thing_is_device_active(device.external_device_id):
-                logger.info(f"Device {device.name} is not active in ThingsBoard, skipping events RPC call")
-                return None
- 
-            # Call ThingsBoard RPC API
-            logbook_data = self._thing_get_flight(device.external_device_id)
-            
-            if not logbook_data:
-                logger.warning(f"No data returned for device {device.external_device_id}")
-                return result
-            
-            result['total_entries'] = len(logbook_data)
-            
-            # Process each logbook entry
-            for entry_data in logbook_data:
-                try:
-                    if self._create_logbook_entry(device, entry_data):
-                        result['new_entries'] += 1
-                except Exception as e:
-                    error_msg = f"Failed to process entry for device {device.external_device_id}: {str(e)}"
-                    logger.error(error_msg)
-                    result['errors'].append(error_msg)
-            
-            # Commit all changes for this device
-            db.session.commit()
-            
-            logger.info(f"Device {device.name}: {result['new_entries']}/{result['total_entries']} new entries")
-            
-        except Exception as e:
-            db.session.rollback()
-            error_msg = f"Failed to sync device {device.external_device_id}: {str(e)}"
-            logger.error(error_msg)
-            result['errors'].append(error_msg)
-        
-        return result
 
     def _thing_get_flight(self, device_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1813,101 +1758,6 @@ class ThingsBoardSyncService:
         
         return result
 
-    def _create_logbook_entry_from_events(self, device: Device, flight_sequence: Dict[str, Any]) -> bool:
-        """
-        Create a logbook entry from a flight sequence (takeoff + landings).
-        
-        Args:
-            device: Device instance
-            flight_sequence: Flight sequence dictionary from _build_flight_sequences
-            
-        Returns:
-            True if new entry was created, False if it already exists
-        """
-        try:
-            takeoff_event = flight_sequence['takeoff_event']
-            landing_events = flight_sequence['landing_events']
-            final_landing_event = landing_events[-1]
-            
-            # Calculate flight duration
-            flight_duration_ms = final_landing_event.total_time - takeoff_event.total_time
-            flight_duration_hours = flight_duration_ms / (1000 * 60 * 60)  # Convert to hours
-            
-            # Create takeoff and landing datetime objects
-            if takeoff_event.date_time:
-                takeoff_datetime = takeoff_event.date_time
-                
-                # Calculate landing datetime
-                landing_datetime = takeoff_event.date_time + timedelta(milliseconds=flight_duration_ms)
-            else:
-                # Fallback to current date if no timestamp available
-                current_date = datetime.now(timezone.utc).date()
-                takeoff_datetime = datetime.combine(current_date, time(10, 0))  # Default 10:00 AM
-                
-                # Calculate landing datetime from duration
-                landing_datetime = takeoff_datetime + timedelta(hours=flight_duration_hours)
-            
-            # Check if logbook entry already exists for this event sequence
-            existing_entry = LogbookEntry.query.filter_by(
-                device_id=device.id,
-                takeoff_datetime=takeoff_datetime,
-                landing_datetime=landing_datetime
-            ).first()
-            
-            if existing_entry:
-                logger.debug(f"Logbook entry already exists for flight sequence starting at {takeoff_event.total_time}ms")
-                return False
-            
-            # Create logbook entry - always create entries, even for unmapped pilots
-            logbook_entry = LogbookEntry(
-                takeoff_datetime=takeoff_datetime,
-                landing_datetime=landing_datetime,
-                aircraft_type=device.model or 'UNKNOWN',
-                aircraft_registration=device.registration or 'UNKNOWN',
-                departure_airport='UNKNOWN',  # Could be enhanced with location data
-                arrival_airport='UNKNOWN',    # Could be enhanced with location data
-                flight_time=round(flight_duration_hours, 2),
-                pilot_in_command_time=round(flight_duration_hours, 2),
-                dual_time=0.0,
-                instrument_time=0.0,
-                night_time=0.0,
-                cross_country_time=0.0,
-                landings_day=len(landing_events),  # Total number of landings in sequence
-                landings_night=0,
-                remarks=f'Takeoff: {takeoff_event.format_log_time()}, '
-                       f'Landing: {final_landing_event.format_log_time()}',
-                pilot_name=None,  # Could be enhanced with pilot detection from events
-                user_id=None,  # Don't assign to any specific user - will be visible in device logbook
-                device_id=device.id  # Always link to device for visibility
-            )
-            
-            db.session.add(logbook_entry)
-            
-            # Link events to logbook entry (we need to flush to get the ID)
-            db.session.flush()
-            
-            # Update events with logbook entry reference
-            try:
-                # Link takeoff event
-                self._add_link_to_event(takeoff_event, logbook_entry.id)
-                
-                # Link landing events
-                for landing_event in landing_events:
-                    self._add_link_to_event(landing_event, logbook_entry.id)
-                
-            except Exception as e:
-                logger.warning(f"Could not link events to logbook entry: {str(e)}")
-            
-            logger.info(f"Created logbook entry from events: {flight_duration_hours:.2f}h flight "
-                       f"with {len(landing_events)} landings for device {device.name}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error creating logbook entry from events: {str(e)}")
-            logger.debug(f"Flight sequence data: {flight_sequence}")
-            raise
-
     def send_checklist_to_device(self, device_id: str, checklist_data: Dict[str, Any]) -> bool:
         """
         Send checklist to device via ThingsBoard RPC v2 API.
@@ -1935,7 +1785,7 @@ class ThingsBoardSyncService:
             "method": "sendChecklist",
             "params": checklist_data,
             "persistent": True,  # Ensure the RPC call persists
-            "expirationTime": int((datetime.now(timezone.utc) + timedelta(days=3)).timestamp() * 1000)
+            "expirationTime": int((datetime.now(timezone.utc) + timedelta(days=7)).timestamp() * 1000)
         }
         
         headers = {
@@ -1947,7 +1797,6 @@ class ThingsBoardSyncService:
         
         try:
             logger.info(f"Sending checklist to device {device_id} via ThingsBoard RPC")
-            # ¸logger.debug(f"RPC payload: {json.dumps(payload, indent=2)}")
             
             response = requests.post(
                 url=url,

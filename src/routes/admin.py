@@ -401,6 +401,7 @@ def test_device_activity():
         
         # Find devices with external_device_id
         devices = Device.query.filter(
+            Device.is_active == True,
             Device.external_device_id.isnot(None),
             Device.external_device_id != ''
         ).all()
@@ -412,7 +413,7 @@ def test_device_activity():
         results = []
         for device in devices:
             is_active = thingsboard_sync._thing_is_device_active(device.external_device_id)
-            results.append(f"Device {device.name} (ID: {device.external_device_id}): {'ACTIVE' if is_active else 'INACTIVE'}")
+            results.append(f"{device.name}: {'ACTIVE' if is_active else 'INACTIVE'}")
             current_app.logger.info(f"Device activity check: {device.name} ({device.external_device_id}) -> {is_active}")
         
         flash(f"Device activity check completed. Results: {'; '.join(results)}", 'info')
