@@ -425,7 +425,7 @@ class ThingsBoardSyncService:
                 return None
  
             # Call ThingsBoard RPC API
-            logbook_data = self._call_thingsboard_api(device.external_device_id)
+            logbook_data = self._thing_get_flight(device.external_device_id)
             
             if not logbook_data:
                 logger.warning(f"No data returned for device {device.external_device_id}")
@@ -456,9 +456,9 @@ class ThingsBoardSyncService:
         
         return result
 
-    def _call_thingsboard_api(self, device_id: str) -> Optional[List[Dict[str, Any]]]:
+    def _thing_get_flight(self, device_id: str) -> Optional[Dict[str, Any]]:
         """
-        Call ThingsBoard RPC API to get logbook entries.
+        Call ThingsBoard RPC API to get flight details.
         
         Args:
             device_id: External device ID in ThingsBoard
@@ -476,8 +476,13 @@ class ThingsBoardSyncService:
         url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
         payload = {
-            "method": "syncLog",
-            "params": { "count": 1000 }  # Adjust count as needed
+            "method": "getFlight",
+            "params": {
+                "events": [
+                    {"page": 42000, "ts": 22123132, "writePos": 12332},
+                    {"page": 44000, "ts": 22123132, "writePos": 12332}
+                ]
+            }
         }
         
         headers = {
@@ -488,7 +493,7 @@ class ThingsBoardSyncService:
         }
         
         try:
-            logger.debug(f"Calling ThingsBoard API for device {device_id}")
+            logger.debug(f"Calling ThingsBoard RPC getFlight{device_id}")
             
             response = requests.post(
                 url=url,
@@ -502,11 +507,11 @@ class ThingsBoardSyncService:
             data = response.json()
             
             # Validate response format
-            if not isinstance(data, list):
+            if not isinstance(data, dict):
                 logger.error(f"Expected list response from ThingsBoard, got {type(data)}")
                 return None
             
-            logger.debug(f"Retrieved {len(data)} entries from ThingsBoard for device {device_id}")
+            # logger.debug(f"Retrieved {len(data)} entries from ThingsBoard for device {device_id}")
             return data
             
         except requests.exceptions.Timeout:

@@ -274,7 +274,7 @@ class Device(db.Model):
         if not self.last_telemetry_update:
             return "Never"
         
-        return self.last_telemetry_update.strftime("%Y-%m-%d %H:%M:%S UTC")
+        return self.last_telemetry_update.strftime("%Y-%m-%d %H:%M UTC")
     
     def __repr__(self):
         return f'<Device {self.name}>'
@@ -503,6 +503,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date_time = db.Column(db.DateTime, nullable=True)  # Optional event timestamp
     page_address = db.Column(db.BigInteger, nullable=False)  # Page address in device logger
+    write_address = db.Column(db.BigInteger, nullable=True)  # Write address from device logger
     total_time = db.Column(db.Integer, nullable=False)  # Total time in milliseconds
     bitfield = db.Column(db.Integer, nullable=False, default=0)  # Event bitfield value
     message = db.Column(db.String(500), nullable=True)  # Optional message/description for the event
