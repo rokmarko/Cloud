@@ -165,7 +165,7 @@
                             <td>
                                 <code class="text-muted">{{ device.serial_number or '-' }}</code>
                             </td>
-                            <td>{{ device.created_at.strftime('%m/%d/%Y') }}</td>
+                            <td>{{ device.created_at.strftime(current_user.date_format) }}</td>
                             <td>
                                 <div class="dropdown">
                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">

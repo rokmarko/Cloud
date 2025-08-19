@@ -103,7 +103,7 @@
                     <p class="card-text">
                         <small class="text-muted">
                             <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">schedule</span>
-                            Created {{ layout.created_at.strftime('%m/%d/%Y') }}
+                            Created {{ layout.created_at.strftime(current_user.date_format) }}
                         </small>
                     </p>
                     

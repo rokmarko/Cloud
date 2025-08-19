@@ -98,7 +98,7 @@
                             <td>{{ event.id }}</td>
                             <td>
                                 {% if event.date_time %}
-                                    {{ event.date_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                                    {{ event.date_time.strftime(current_user.date_format + ' %H:%M:%S') }}
                                 {% else %}
                                     <span class="text-muted">-</span>
                                 {% endif %}

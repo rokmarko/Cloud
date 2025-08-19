@@ -151,7 +151,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <small class="text-muted">{{ pilot.created_at.strftime('%Y-%m-%d') if pilot.created_at else 'N/A' }}</small>
+                                        <small class="text-muted">{{ pilot.created_at.strftime(current_user.date_format) if pilot.created_at else 'N/A' }}</small>
                                     </td>
                                     <td>
                                         <button type="button" class="btn btn-outline-danger btn-sm"

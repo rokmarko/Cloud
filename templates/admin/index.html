@@ -110,7 +110,7 @@
                                     <span class="badge bg-secondary">Unverified</span>
                                 {% endif %}
                                 <br>
-                                <small class="text-muted">{{ user.created_at.strftime('%m/%d/%Y') }}</small>
+                                <small class="text-muted">{{ user.created_at.strftime(current_user.date_format) }}</small>
                             </div>
                         </div>
                         {% endfor %}
@@ -144,7 +144,7 @@
                                     <span class="badge bg-info">{{ device.registration }}</span>
                                 {% endif %}
                                 <br>
-                                <small class="text-muted">{{ device.created_at.strftime('%m/%d/%Y') }}</small>
+                                <small class="text-muted">{{ device.created_at.strftime(current_user.date_format) }}</small>
                             </div>
                         </div>
                         {% endfor %}

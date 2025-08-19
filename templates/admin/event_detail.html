@@ -28,7 +28,7 @@
                                 <dt class="col-sm-4">Date/Time:</dt>
                                 <dd class="col-sm-8">
                                     {% if event.date_time %}
-                                        {{ event.date_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                                        {{ event.date_time.strftime(current_user.date_format + ' %H:%M:%S') }}
                                     {% else %}
                                         <span class="text-muted">Not specified</span>
                                     {% endif %}
@@ -80,10 +80,10 @@
                                 </dd>
                                 
                                 <dt class="col-sm-5">Created:</dt>
-                                <dd class="col-sm-7">{{ event.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                                <dd class="col-sm-7">{{ event.created_at.strftime(current_user.date_format + ' %H:%M:%S') }}</dd>
                                 
                                 <dt class="col-sm-5">Updated:</dt>
-                                <dd class="col-sm-7">{{ event.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                                <dd class="col-sm-7">{{ event.updated_at.strftime(current_user.date_format + ' %H:%M:%S') }}</dd>
                             </dl>
                         </div>
                     </div>

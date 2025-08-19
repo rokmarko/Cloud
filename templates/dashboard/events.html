@@ -130,7 +130,7 @@
                         <tr>
                             <td>
                                 {% if event.date_time %}
-                                    <div>{{ event.date_time.strftime('%Y-%m-%d') }}</div>
+                                    <div>{{ event.date_time.strftime(current_user.date_format) }}</div>
                                     <small class="text-muted">{{ event.date_time.strftime('%H:%M:%S') }}</small>
                                 {% else %}
                                     <span class="text-muted">No timestamp</span>

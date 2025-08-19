@@ -136,7 +136,7 @@
                         <div class="col-md-6">
                             <p><strong>Next Run:</strong> 
                                 {% if sync_job.next_run_time %}
-                                    {{ sync_job.next_run_time.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                    {{ sync_job.next_run_time.strftime(current_user.date_format + ' %H:%M:%S UTC') }}
                                 {% else %}
                                     Not scheduled
                                 {% endif %}
@@ -256,7 +256,7 @@
                             <tbody>
                                 {% for entry in recent_entries %}
                                 <tr>
-                                    <td>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ entry.takeoff_datetime.strftime(current_user.date_format) }}</td>
                                     <td>
                                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
                                         {{ entry.aircraft_registration }}
