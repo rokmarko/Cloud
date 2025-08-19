@@ -396,6 +396,9 @@
                                 <li><a class="dropdown-item" href="{{ url_for('dashboard.index') }}">
                                     <span class="material-icons me-2">dashboard</span> Dashboard
                                 </a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('dashboard.user_settings') }}">
+                                    <span class="material-icons me-2">settings</span> User Settings
+                                </a></li>
                                 {% if current_user.is_admin %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{{ url_for('admin.index') }}">

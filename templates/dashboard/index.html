@@ -94,7 +94,7 @@
                             <tbody>
                                 {% for entry in recent_entries %}
                                 <tr>
-                                    <td>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</td>
+                                    <td>{{ entry.takeoff_datetime.strftime(current_user.date_format) }}</td>
                                     <td>
                                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">flight</span>
                                         {{ entry.aircraft_registration }}
@@ -174,7 +174,7 @@
                 <p class="text-muted mb-0">
                     {% if current_user.last_login %}
                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">schedule</span>
-                        Last login: {{ current_user.last_login.strftime('%m/%d/%Y at %I:%M %p') }}
+                        Last login: {{ current_user.last_login.strftime(current_user.date_format) }}
                     {% else %}
                         <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">celebration</span>
                         This is your first login. Welcome to KanardiaCloud!

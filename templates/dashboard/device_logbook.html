@@ -113,7 +113,7 @@
                     {% endif %}
                     
                     <dt class="col-sm-4">Added:</dt>
-                    <dd class="col-sm-8">{{ device.created_at.strftime('%B %d, %Y') }}</dd>
+                    <dd class="col-sm-8">{{ device.created_at.strftime(current_user.date_format) }}</dd>
                 </dl>
             </div>
         </div>
@@ -147,7 +147,7 @@
                 <tbody>
                     {% for entry in entries.items %}
                     <tr>
-                        <td>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</td>
+                        <td>{{ entry.takeoff_datetime.strftime(current_user.date_format) }}</td>
                         <td>
                             {% if entry.pilot_name %}
                                 {{ entry.pilot_name }}

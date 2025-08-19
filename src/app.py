@@ -63,6 +63,12 @@ def create_app():
         from src.models import User
         return User.query.get(int(user_id))
     
+    # Make CSRF token available to all templates
+    @app.template_global()
+    def csrf_token():
+        from flask_wtf.csrf import generate_csrf
+        return generate_csrf()
+    
     # Import models to ensure they are registered with SQLAlchemy
     from src import models
     

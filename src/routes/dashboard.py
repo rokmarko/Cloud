@@ -11,6 +11,7 @@ from datetime import datetime
 from PIL import Image
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
 from flask_login import login_required, current_user
+from flask_wtf.csrf import validate_csrf
 from src.app import db
 from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
 from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, InstrumentLayoutImportForm, LogbookEntryForm, InitialLogbookTimeForm, DevicePilotMappingForm
@@ -18,6 +19,32 @@ from src.services.thingsboard_sync import ThingsBoardSyncService
 import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+@dashboard_bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+def user_settings():
+    """User settings page for configuring preferences like date format."""
+    if request.method == 'POST':
+        try:
+            # Validate CSRF token
+            validate_csrf(request.form.get('csrf_token'))
+            
+            # Validate and set date format
+            date_format = request.form.get('date_format', '%Y-%m-%d')
+            valid_formats = ['%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y', '%m/%d/%Y']
+            
+            if date_format in valid_formats:
+                current_user.date_format = date_format
+                db.session.commit()
+                flash('Settings updated successfully.', 'success')
+            else:
+                flash('Invalid date format selected.', 'error')
+                
+        except Exception as e:
+            flash('Invalid request. Please try again.', 'error')
+            
+        return redirect(url_for('dashboard.user_settings'))
+    return render_template('dashboard/user_settings.html', title='User Settings')
 
 
 def process_thumbnail_base64(base64_data, thumbnail_size=(300, 200)):

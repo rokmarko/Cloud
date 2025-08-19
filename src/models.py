@@ -21,6 +21,7 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
+    date_format = db.Column(db.String(20), default="%Y-%m-%d", nullable=False)  # User's preferred date format
     
     # Relationships
     devices = db.relationship('Device', backref='owner', lazy='dynamic', cascade='all, delete-orphan')

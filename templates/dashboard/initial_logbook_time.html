@@ -227,7 +227,7 @@
             <div class="card-body">
                 <dl class="row mb-0">
                     <dt class="col-sm-5">Effective Date:</dt>
-                    <dd class="col-sm-7">{{ existing_initial.effective_date.strftime('%B %d, %Y') }}</dd>
+                    <dd class="col-sm-7">{{ existing_initial.effective_date.strftime(current_user.date_format) }}</dd>
                     
                     <dt class="col-sm-5">Total Time:</dt>
                     <dd class="col-sm-7">{{ "%.1f"|format(existing_initial.total_time) }} hrs</dd>

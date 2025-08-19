@@ -125,11 +125,11 @@
                     <dd class="col-sm-8">{{ items|length if items else 0 }}</dd>
                     
                     <dt class="col-sm-4">Created:</dt>
-                    <dd class="col-sm-8">{{ checklist.created_at.strftime('%B %d, %Y') }}</dd>
+                    <dd class="col-sm-8">{{ checklist.created_at.strftime(current_user.date_format) }}</dd>
                     
                     {% if checklist.updated_at > checklist.created_at %}
                     <dt class="col-sm-4">Updated:</dt>
-                    <dd class="col-sm-8">{{ checklist.updated_at.strftime('%B %d, %Y') }}</dd>
+                    <dd class="col-sm-8">{{ checklist.updated_at.strftime(current_user.date_format) }}</dd>
                     {% endif %}
                 </dl>
             </div>

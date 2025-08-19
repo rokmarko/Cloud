@@ -95,7 +95,7 @@
                 <div class="row">
                     <div class="col-sm-6">
                         <strong>Created:</strong>
-                        <p class="text-muted">{{ device.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        <p class="text-muted">{{ device.created_at.strftime(current_user.date_format) }}</p>
                     </div>
                     <div class="col-sm-6">
                         <strong>Device ID:</strong>

@@ -158,11 +158,11 @@
                     <p class="card-text">
                         <small class="text-muted">
                             <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">schedule</span>
-                            Created {{ checklist.created_at.strftime('%m/%d/%Y') }}
+                            Created {{ checklist.created_at.strftime(current_user.date_format) }}
                             {% if checklist.updated_at and checklist.updated_at > checklist.created_at %}
                             <br>
                             <span class="material-icons me-1" style="font-size: 1rem; vertical-align: middle;">update</span>
-                            Modified {{ checklist.updated_at.strftime('%m/%d/%Y at %H:%M') }}
+                            Modified {{ checklist.updated_at.strftime(current_user.date_format) }}
                             {% endif %}
                         </small>
                     </p>

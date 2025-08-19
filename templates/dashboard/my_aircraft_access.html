@@ -118,7 +118,7 @@
                             <div class="list-group-item px-0 py-2">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <strong>{{ entry.takeoff_datetime.strftime('%m/%d/%Y') }}</strong><br>
+                                        <strong>{{ entry.takeoff_datetime.strftime(current_user.date_format) }}</strong><br>
                                         <small class="text-muted">{{ entry.departure_airport }} → {{ entry.arrival_airport }}</small><br>
                                         <small class="text-muted">
                                             <span class="material-icons me-1" style="font-size: 0.7rem; vertical-align: middle;">flight_takeoff</span>
@@ -146,7 +146,7 @@
                     <div class="d-flex justify-content-between">
                         <small class="text-muted">
                             <i class="material-icons me-1">schedule</i>
-                            Mapped {{ mapping.created_at.strftime('%m/%d/%Y') }}
+                            Mapped {{ mapping.created_at.strftime(current_user.date_format) }}
                         </small>
                         {% if mapping.logbook_entry_count > 0 %}
                         <a href="{{ url_for('dashboard.logbook') }}?search={{ mapping.pilot_name }}" 
