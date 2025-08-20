@@ -316,6 +316,10 @@ def sync_management():
     # Get ThingsBoard authentication status
     auth_status = thingsboard_sync.get_authentication_status()
     
+    # Get ThingsBoard server configuration
+    import os
+    thingsboard_server = os.environ.get('THINGSBOARD_URL', 'Not configured')
+    
     return render_template('admin/sync.html',
                          title='ThingsBoard Sync Management',
                          total_devices=total_devices,
@@ -324,7 +328,8 @@ def sync_management():
                          synced_entries_count=synced_entries_count,
                          events_count=events_count,
                          sync_job=sync_job,
-                         auth_status=auth_status)
+                         auth_status=auth_status,
+                         thingsboard_server=thingsboard_server)
 
 
 @admin_bp.route('/sync/test-auth', methods=['POST'])
