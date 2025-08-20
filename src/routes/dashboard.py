@@ -13,7 +13,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from flask_wtf.csrf import validate_csrf
 from src.app import db
-from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event
+from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event, FlightPoint
 from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, InstrumentLayoutImportForm, LogbookEntryForm, InitialLogbookTimeForm, DevicePilotMappingForm
 from src.services.thingsboard_sync import ThingsBoardSyncService
 import json
@@ -1088,6 +1088,124 @@ def delete_initial_logbook_time():
         flash('No initial logbook time found to delete.', 'error')
     
     return redirect(url_for('dashboard.logbook'))
+
+
+@dashboard_bp.route('/logbook/<int:entry_id>/flight-path')
+@login_required
+def flight_path(entry_id):
+    """Display flight path on map for a logbook entry."""
+    # Get the logbook entry and check user access
+    from src.models import Pilot
+    
+    # Get pilot mappings for current user
+    user_pilot_mappings = Pilot.query.filter_by(user_id=current_user.id, is_active=True).all()
+    user_pilot_names = [mapping.pilot_name for mapping in user_pilot_mappings]
+    
+    # Build query for entry access control
+    query = LogbookEntry.query.filter_by(id=entry_id)
+    
+    if user_pilot_names:
+        # Include entries directly assigned to user OR entries with user's pilot name
+        query = query.filter(
+            db.or_(
+                LogbookEntry.user_id == current_user.id,
+                LogbookEntry.pilot_name.in_(user_pilot_names)
+            )
+        )
+    else:
+        # No pilot mappings, just show directly assigned entries
+        query = query.filter(LogbookEntry.user_id == current_user.id)
+    
+    entry = query.first_or_404()
+    
+    # Get flight points count
+    points_count = FlightPoint.query.filter_by(logbook_entry_id=entry.id).count()
+    
+    return render_template('dashboard/flight_path.html', 
+                         title=f'Flight Path - {entry.departure_airport} to {entry.arrival_airport}',
+                         entry=entry,
+                         points_count=points_count)
+
+
+@dashboard_bp.route('/api/logbook/<int:entry_id>/flight-points')
+@login_required
+def api_flight_points(entry_id):
+    """API endpoint to get flight points data for a logbook entry."""
+    # Get the logbook entry and check user access
+    from src.models import Pilot
+    
+    # Get pilot mappings for current user
+    user_pilot_mappings = Pilot.query.filter_by(user_id=current_user.id, is_active=True).all()
+    user_pilot_names = [mapping.pilot_name for mapping in user_pilot_mappings]
+    
+    # Build query for entry access control
+    query = LogbookEntry.query.filter_by(id=entry_id)
+    
+    if user_pilot_names:
+        # Include entries directly assigned to user OR entries with user's pilot name
+        query = query.filter(
+            db.or_(
+                LogbookEntry.user_id == current_user.id,
+                LogbookEntry.pilot_name.in_(user_pilot_names)
+            )
+        )
+    else:
+        # No pilot mappings, just show directly assigned entries
+        query = query.filter(LogbookEntry.user_id == current_user.id)
+    
+    entry = query.first_or_404()
+    
+    # Get flight points ordered by sequence
+    flight_points = FlightPoint.query.filter_by(
+        logbook_entry_id=entry.id
+    ).order_by(FlightPoint.sequence.asc()).all()
+    
+    if not flight_points:
+        return jsonify({
+            'success': False,
+            'message': 'No flight points available for this entry'
+        })
+    
+    # Convert flight points to JSON format suitable for mapping
+    points_data = []
+    for point in flight_points:
+        points_data.append({
+            'latitude': float(point.latitude),
+            'longitude': float(point.longitude),
+            'sequence': point.sequence,
+            'timestamp_offset': point.timestamp_offset,
+            'airspeed': float(point.airspeed) if point.airspeed is not None else None,
+            'static_pressure': float(point.static_pressure) if point.static_pressure is not None else None
+        })
+    
+    # Calculate flight bounds for map centering
+    lats = [p['latitude'] for p in points_data]
+    lons = [p['longitude'] for p in points_data]
+    
+    bounds = {
+        'north': max(lats),
+        'south': min(lats),
+        'east': max(lons),
+        'west': min(lons),
+        'center_lat': sum(lats) / len(lats),
+        'center_lon': sum(lons) / len(lons)
+    }
+    
+    return jsonify({
+        'success': True,
+        'entry': {
+            'id': entry.id,
+            'departure_airport': entry.departure_airport,
+            'arrival_airport': entry.arrival_airport,
+            'aircraft_registration': entry.aircraft_registration,
+            'takeoff_datetime': entry.takeoff_datetime.isoformat(),
+            'landing_datetime': entry.landing_datetime.isoformat(),
+            'flight_time': float(entry.flight_time)
+        },
+        'points': points_data,
+        'bounds': bounds,
+        'total_points': len(points_data)
+    })
 
 
 # API Endpoints for Checklist Editor Integration

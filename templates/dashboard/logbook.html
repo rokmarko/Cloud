@@ -120,6 +120,7 @@
                             <th>Night</th>
                             <th>Landings</th>
                             <th>Remarks</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -223,6 +224,14 @@
                                 {% else %}
                                     <span class="text-muted">-</span>
                                 {% endif %}
+                            </td>
+                            <td>
+                                <!-- Flight Path Button -->
+                                <a href="{{ url_for('dashboard.flight_path', entry_id=entry.id) }}" 
+                                   class="btn btn-sm btn-outline-primary" 
+                                   title="View Flight Path">
+                                    <span class="material-icons" style="font-size: 1rem;">map</span>
+                                </a>
                             </td>
                         </tr>
                         {% endfor %}

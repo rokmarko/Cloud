@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Flight Info Panel -->
+        <div class="col-md-3">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-plane"></i> Flight Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <strong>Aircraft:</strong><br>
+                        {{ entry.aircraft_registration }} ({{ entry.aircraft_type }})
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Route:</strong><br>
+                        <span class="badge bg-success">{{ entry.departure_airport }}</span>
+                        <i class="fas fa-arrow-right mx-2"></i>
+                        <span class="badge bg-danger">{{ entry.arrival_airport }}</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Date:</strong><br>
+                        {{ entry.takeoff_datetime.strftime(current_user.date_format) }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Time:</strong><br>
+                        Takeoff: {{ entry.takeoff_datetime.strftime('%H:%M') }}<br>
+                        Landing: {{ entry.landing_datetime.strftime('%H:%M') }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Duration:</strong><br>
+                        {{ "%.2f"|format(entry.flight_time) }} hours
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Pilot:</strong><br>
+                        {{ entry.pilot_name or 'Unknown' }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Flight Points:</strong><br>
+                        <span class="badge bg-info">{{ points_count }}</span> GPS coordinates
+                        {% if points_count == 0 %}
+                        <br><small class="text-muted">No flight path data available</small>
+                        {% endif %}
+                    </div>
+                    
+                    {% if entry.remarks %}
+                    <div class="mb-3">
+                        <strong>Remarks:</strong><br>
+                        <small>{{ entry.remarks }}</small>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mt-4">
+                        <a href="{{ url_for('dashboard.logbook') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Logbook
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Flight Data Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-chart-line"></i> Flight Data
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="flight-stats">
+                        <p class="text-muted">Loading flight data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Map Panel -->
+        <div class="col-md-9">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-map"></i> Flight Path
+                    </h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary" id="fit-map">
+                            <i class="fas fa-expand-arrows-alt"></i> Fit to Path
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="toggle-points">
+                            <i class="fas fa-dot-circle"></i> Toggle Points
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if points_count > 0 %}
+                    <div id="flight-map" style="height: 600px; width: 100%;"></div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-map-marked-alt fa-3x text-muted mb-3"></i>
+                        <h4>No Flight Path Data</h4>
+                        <p class="text-muted">
+                            This flight doesn't have GPS tracking data available.<br>
+                            Flight path visualization requires flight points from the aircraft's data logger.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if points_count > 0 %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let map = null;
+    let flightPath = null;
+    let pointMarkers = [];
+    let showPoints = false;
+    
+    // Initialize the map
+    function initMap() {
+        // Create map centered on Europe initially
+        map = L.map('flight-map').setView([46.5, 15.0], 8);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+        
+        // Load and display flight data
+        loadFlightData();
+    }
+    
+    // Load flight data from API
+    function loadFlightData() {
+        fetch(`{{ url_for('dashboard.api_flight_points', entry_id=entry.id) }}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayFlightPath(data);
+                    updateFlightStats(data);
+                } else {
+                    console.error('Failed to load flight data:', data.message);
+                    document.getElementById('flight-stats').innerHTML = 
+                        '<p class="text-danger"><i class="fas fa-exclamation-triangle"></i> ' + data.message + '</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading flight data:', error);
+                document.getElementById('flight-stats').innerHTML = 
+                    '<p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Error loading flight data</p>';
+            });
+    }
+    
+    // Display flight path on map
+    function displayFlightPath(data) {
+        if (!data.points || data.points.length === 0) {
+            return;
+        }
+        
+        // Convert points to Leaflet LatLng format
+        const latLngs = data.points.map(point => [point.latitude, point.longitude]);
+        
+        // Create flight path polyline
+        flightPath = L.polyline(latLngs, {
+            color: '#007bff',
+            weight: 3,
+            opacity: 0.8
+        }).addTo(map);
+        
+        // Add departure marker (green)
+        const firstPoint = data.points[0];
+        const departureMarker = L.marker([firstPoint.latitude, firstPoint.longitude], {
+            icon: L.divIcon({
+                html: '<i class="fas fa-plane-departure" style="color: green; font-size: 16px;"></i>',
+                iconSize: [20, 20],
+                className: 'custom-marker'
+            })
+        }).addTo(map);
+        
+        departureMarker.bindPopup(`
+            <strong>Departure: ${data.entry.departure_airport}</strong><br>
+            Time: ${new Date(data.entry.takeoff_datetime).toLocaleString()}<br>
+            Coordinates: ${firstPoint.latitude.toFixed(6)}, ${firstPoint.longitude.toFixed(6)}
+        `);
+        
+        // Add arrival marker (red)
+        const lastPoint = data.points[data.points.length - 1];
+        const arrivalMarker = L.marker([lastPoint.latitude, lastPoint.longitude], {
+            icon: L.divIcon({
+                html: '<i class="fas fa-plane-arrival" style="color: red; font-size: 16px;"></i>',
+                iconSize: [20, 20],
+                className: 'custom-marker'
+            })
+        }).addTo(map);
+        
+        arrivalMarker.bindPopup(`
+            <strong>Arrival: ${data.entry.arrival_airport}</strong><br>
+            Time: ${new Date(data.entry.landing_datetime).toLocaleString()}<br>
+            Coordinates: ${lastPoint.latitude.toFixed(6)}, ${lastPoint.longitude.toFixed(6)}
+        `);
+        
+        // Fit map to flight path
+        map.fitBounds(flightPath.getBounds(), { padding: [20, 20] });
+        
+        // Store points for toggle functionality
+        window.flightPoints = data.points;
+    }
+    
+    // Update flight statistics
+    function updateFlightStats(data) {
+        const points = data.points;
+        if (points.length === 0) {
+            document.getElementById('flight-stats').innerHTML = 
+                '<p class="text-muted">No flight data available</p>';
+            return;
+        }
+        
+        // Calculate statistics
+        const airspeeds = points.filter(p => p.airspeed !== null).map(p => p.airspeed);
+        const maxAirspeed = airspeeds.length > 0 ? Math.max(...airspeeds) : 0;
+        const avgAirspeed = airspeeds.length > 0 ? airspeeds.reduce((a, b) => a + b, 0) / airspeeds.length : 0;
+        
+        const duration = points.length > 0 ? points[points.length - 1].timestamp_offset : 0;
+        const durationMinutes = Math.round(duration / 60);
+        
+        const statsHtml = `
+            <div class="mb-2">
+                <strong>Max Speed:</strong><br>
+                <span class="text-primary">${maxAirspeed.toFixed(0)} knots</span>
+            </div>
+            <div class="mb-2">
+                <strong>Avg Speed:</strong><br>
+                <span class="text-info">${avgAirspeed.toFixed(0)} knots</span>
+            </div>
+            <div class="mb-2">
+                <strong>Track Duration:</strong><br>
+                <span class="text-success">${durationMinutes} minutes</span>
+            </div>
+            <div class="mb-2">
+                <strong>Data Points:</strong><br>
+                <span class="text-secondary">${points.length} points</span>
+            </div>
+            <div class="mb-2">
+                <strong>Sampling Rate:</strong><br>
+                <span class="text-muted">Every 5 seconds</span>
+            </div>
+        `;
+        
+        document.getElementById('flight-stats').innerHTML = statsHtml;
+    }
+    
+    // Toggle flight path points visibility
+    function togglePoints() {
+        if (!window.flightPoints) return;
+        
+        if (showPoints) {
+            // Hide points
+            pointMarkers.forEach(marker => map.removeLayer(marker));
+            pointMarkers = [];
+            showPoints = false;
+            document.getElementById('toggle-points').innerHTML = 
+                '<i class="fas fa-dot-circle"></i> Show Points';
+        } else {
+            // Show points
+            window.flightPoints.forEach((point, index) => {
+                // Show only every 10th point to avoid clutter
+                if (index % 10 === 0) {
+                    const marker = L.circleMarker([point.latitude, point.longitude], {
+                        radius: 3,
+                        fillColor: '#ffc107',
+                        color: '#ff6600',
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+                    
+                    const timeOffset = Math.round(point.timestamp_offset / 60);
+                    marker.bindPopup(`
+                        <strong>Flight Point #${point.sequence}</strong><br>
+                        Time: +${timeOffset} minutes<br>
+                        Coordinates: ${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}<br>
+                        ${point.airspeed ? `Speed: ${point.airspeed.toFixed(0)} knots<br>` : ''}
+                        ${point.static_pressure ? `Pressure: ${point.static_pressure.toFixed(1)} hPa` : ''}
+                    `);
+                    
+                    pointMarkers.push(marker);
+                }
+            });
+            showPoints = true;
+            document.getElementById('toggle-points').innerHTML = 
+                '<i class="fas fa-eye-slash"></i> Hide Points';
+        }
+    }
+    
+    // Fit map to flight path
+    function fitToPath() {
+        if (flightPath) {
+            map.fitBounds(flightPath.getBounds(), { padding: [20, 20] });
+        }
+    }
+    
+    // Event listeners
+    document.getElementById('fit-map').addEventListener('click', fitToPath);
+    document.getElementById('toggle-points').addEventListener('click', togglePoints);
+    
+    // Initialize the map
+    initMap();
+});
+</script>
+
+<style>
+.custom-marker {
+    background: transparent;
+    border: none;
+    text-align: center;
+}
+.custom-marker i {
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+</style>
+{% endif %}
+
+{% endblock %}

@@ -821,8 +821,7 @@ class ThingsBoardSyncService:
                         device.current_logger_page = events_data.get('log_position', 0)
                         device.updated_at = datetime.now(timezone.utc)
 
-                    if 'write_page' in events_data:
-                        write_page = events_data.get('write_page', 0)
+                    write_page = events_data.get('write_page', 0)
 
                     # Process initial events from syncLog call
                     initial_events = events_data.get('events', [])
@@ -849,10 +848,16 @@ class ThingsBoardSyncService:
                             break
                         
                         if isinstance(additional_data, dict):
+                            # Update current logger page if provided
+                            if 'log_position' in additional_data:
+                                device.current_logger_page = additional_data.get('log_position', 0)
+                                device.updated_at = datetime.now(timezone.utc)
+
+                            write_page = additional_data.get('write_page', 0)
                             additional_events = additional_data.get('events', [])
                             if additional_events:
                                 # Process this batch immediately
-                                batch_result = self._process_events(device, additional_events)
+                                batch_result = self._process_events(device, additional_events, write_page)
                                 result['new_events'] += batch_result['new_events']
                                 result['errors'].extend(batch_result['errors'])
                                 total_events_processed += len(additional_events)
