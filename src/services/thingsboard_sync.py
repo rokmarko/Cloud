@@ -12,6 +12,7 @@ from datetime import datetime, date, timedelta, time, timezone
 from typing import List, Dict, Any, Optional
 from src.app import db
 from src.models import Device, LogbookEntry, User, Pilot, Event
+from src.services.geocoding import get_geocoder
 from flask import current_app
 
 
@@ -153,6 +154,8 @@ class ThingsBoardSyncService:
             'total_events': 0,
             'new_logbook_entries': 0,
             'telemetry_updated': 0,
+            'flight_points_processed': 0,
+            'flight_points_successful': 0,
             'errors': []
         }
         
@@ -179,16 +182,22 @@ class ThingsBoardSyncService:
                     # Sync events
                     events_result = self.sync_device_events(device)
                     
+                    # Process existing flights for flight points (limit to 100 per sync)
+                    flight_points_result = self.process_existing_flights_for_points(device, max_entries=100)
+                    
                     results['synced_devices'] += 1
                     # results['new_entries'] += device_result.get('new_entries', 0)
                     # results['total_entries'] += device_result.get('total_entries', 0)
                     results['new_events'] += events_result.get('new_events', 0)
                     results['total_events'] += events_result.get('total_events', 0)
                     results['new_logbook_entries'] += events_result.get('new_logbook_entries', 0)
+                    results['flight_points_processed'] += flight_points_result.get('processed', 0)
+                    results['flight_points_successful'] += flight_points_result.get('successful', 0)
                     
                     # Combine errors
                     # results['errors'].extend(device_result.get('errors', []))
                     results['errors'].extend(events_result.get('errors', []))
+                    results['errors'].extend(flight_points_result.get('errors', []))
                     
                 except Exception as e:
                     error_msg = f"Failed to sync device {device.name} (ID: {device.external_device_id}): {str(e)}"
@@ -198,7 +207,8 @@ class ThingsBoardSyncService:
             logger.info(f"Sync completed: {results['synced_devices']}/{results['total_devices']} devices, "
                        f"{results['new_entries']} new entries, {results['new_events']} new events, "
                        f"{results['new_logbook_entries']} new logbook entries, "
-                       f"{results['telemetry_updated']} devices with telemetry updated")
+                       f"{results['telemetry_updated']} devices with telemetry updated, "
+                       f"{results['flight_points_successful']}/{results['flight_points_processed']} flight points processed")
             
         except Exception as e:
             error_msg = f"Fatal error during sync: {str(e)}"
@@ -247,7 +257,7 @@ class ThingsBoardSyncService:
             
             data = response.json()
 
-            logger.debug(f"Device {device_id} telemetry response: {json.dumps(data, indent=2)}")
+            # logger.debug(f"Device {device_id} telemetry response: {json.dumps(data, indent=2)}")
 
             # Check if 'active' attribute exists and is true
             if isinstance(data, list) and len(data) > 0:
@@ -311,7 +321,7 @@ class ThingsBoardSyncService:
             
             data = response.json()
             
-            logger.debug(f"Device {device_id} telemetry response: {json.dumps(data, indent=2)}")
+            # logger.debug(f"Device {device_id} telemetry response: {json.dumps(data, indent=2)}")
             
             # Parse telemetry data from response
             telemetry = {}
@@ -351,7 +361,7 @@ class ThingsBoardSyncService:
                     logger.warning(f"Could not determine latest timestamp: {e}")
                     # Don't add timestamp if we can't determine it
             
-            logger.debug(f"Parsed telemetry for device {device_id}: {telemetry}")
+            # logger.debug(f"Parsed telemetry for device {device_id}: {telemetry}")
             return telemetry if telemetry else None
             
         except requests.exceptions.RequestException as e:
@@ -401,15 +411,17 @@ class ThingsBoardSyncService:
             return False
     
 
-    def _thing_get_flight(self, device_id: str) -> Optional[Dict[str, Any]]:
+    def _thing_get_flight(self, device_id: str, takeoff_event: 'Event', landing_event: 'Event') -> Optional[Dict[str, Any]]:
         """
-        Call ThingsBoard RPC API to get flight details.
+        Call ThingsBoard RPC API to get flight details between takeoff and landing events.
         
         Args:
             device_id: External device ID in ThingsBoard
+            takeoff_event: Takeoff event from database
+            landing_event: Landing event from database
             
         Returns:
-            List of logbook entry dictionaries or None if error
+            Flight details dictionary or None if error
         """
         
         # Authenticate and get JWT token
@@ -420,15 +432,37 @@ class ThingsBoardSyncService:
         
         url = f"{self.base_url}/api/rpc/twoway/{device_id}"
         
+        # Prepare events data from takeoff and landing events
+        events_data = []
+        
+        # Add takeoff event
+        if takeoff_event:
+            events_data.append({
+                "page": takeoff_event.page_address,
+                "ts": int(takeoff_event.total_time),  # Use total_time as timestamp
+                "write_page": takeoff_event.write_address,  # Use same as page for now
+                "bits": takeoff_event.bitfield or 0
+            })
+        
+        # Add landing event
+        if landing_event:
+            events_data.append({
+                "page": landing_event.page_address,
+                "ts": int(landing_event.total_time),  # Use total_time as timestamp
+                "write_page": landing_event.write_address,
+                "bits": landing_event.bitfield or 0
+            })
+        
         payload = {
             "method": "getFlight",
             "params": {
-                "events": [
-                    {"page": 42000, "ts": 22123132, "writePos": 12332},
-                    {"page": 44000, "ts": 22123132, "writePos": 12332}
-                ]
-            }
+                "events": events_data
+            },
+            "persistent": False,
+            "timeout": 5000
         }
+
+        logger.debug(f"Payload for ThingsBoard getFlight: {json.dumps(payload, indent=2)}")
         
         headers = {
             'Content-Type': 'application/json',
@@ -438,7 +472,7 @@ class ThingsBoardSyncService:
         }
         
         try:
-            logger.debug(f"Calling ThingsBoard RPC getFlight{device_id}")
+            logger.debug(f"Calling ThingsBoard RPC getFlight for device {device_id} with {len(events_data)} events")
             
             response = requests.post(
                 url=url,
@@ -453,17 +487,29 @@ class ThingsBoardSyncService:
             
             # Validate response format
             if not isinstance(data, dict):
-                logger.error(f"Expected list response from ThingsBoard, got {type(data)}")
+                logger.error(f"Expected dict response from ThingsBoard getFlight, got {type(data)}")
                 return None
             
-            # logger.debug(f"Retrieved {len(data)} entries from ThingsBoard for device {device_id}")
+            # Check status
+            status = data.get('status')
+            if status != 'OK':
+                logger.warning(f"ThingsBoard getFlight returned status: {status}")
+                return data  # Return even if not OK, let caller handle
+            
+            # Validate points data
+            points = data.get('points', [])
+            if not isinstance(points, list):
+                logger.error(f"Expected list of points from ThingsBoard getFlight, got {type(points)}")
+                return None
+            
+            logger.debug(f"Retrieved {len(points)} flight points from ThingsBoard for device {device_id}")
             return data
             
         except requests.exceptions.Timeout:
-            logger.error(f"Timeout calling ThingsBoard API for device {device_id}")
+            logger.error(f"Timeout calling ThingsBoard getFlight API for device {device_id}")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"HTTP error calling ThingsBoard API for device {device_id}: {str(e)}")
+            logger.error(f"HTTP error calling ThingsBoard getFlight API for device {device_id}: {str(e)}")
             # If we get an authentication error, clear the token and try once more
             if hasattr(e, 'response') and e.response and e.response.status_code in [401, 403]:
                 logger.info("Authentication failed, clearing token and retrying...")
@@ -472,10 +518,10 @@ class ThingsBoardSyncService:
                 # Could implement one retry here, but for now just return None
             return None
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON response from ThingsBoard for device {device_id}: {str(e)}")
+            logger.error(f"Invalid JSON response from ThingsBoard getFlight for device {device_id}: {str(e)}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error calling ThingsBoard API for device {device_id}: {str(e)}")
+            logger.error(f"Unexpected error calling ThingsBoard getFlight API for device {device_id}: {str(e)}")
             return None
     
     def _create_logbook_entry(self, device: Device, entry_data: Dict[str, Any]) -> bool:
@@ -774,11 +820,14 @@ class ThingsBoardSyncService:
                     if 'log_position' in events_data:
                         device.current_logger_page = events_data.get('log_position', 0)
                         device.updated_at = datetime.now(timezone.utc)
-                    
+
+                    if 'write_page' in events_data:
+                        write_page = events_data.get('write_page', 0)
+
                     # Process initial events from syncLog call
                     initial_events = events_data.get('events', [])
                     if initial_events:
-                        batch_result = self._process_events(device, initial_events)
+                        batch_result = self._process_events(device, initial_events, write_page)
                         result['new_events'] += batch_result['new_events']
                         result['errors'].extend(batch_result['errors'])
                         total_events_processed += len(initial_events)
@@ -957,6 +1006,7 @@ class ThingsBoardSyncService:
             # Extract event fields
             date_time_str = event_data.get('date_time')
             page_address = event_data.get('page')
+            write_address = event_data.get('write_page')
             total_time = event_data.get('total_time')
             bitfield = event_data.get('bits', 0)
             message = event_data.get('message')  # Optional message field
@@ -998,6 +1048,7 @@ class ThingsBoardSyncService:
             event = Event(
                 date_time=event_datetime,
                 page_address=page_address,
+                write_address=write_address,
                 total_time=total_time,
                 bitfield=int(bitfield) if bitfield is not None else 0,
                 message=message,  # Include message field
@@ -1608,6 +1659,28 @@ class ThingsBoardSyncService:
                 for event in [flight_pair[0], flight_pair[1]]:
                     self._add_link_to_event(event, logbook_entry.id)
             
+            # Process flight points if we have takeoff and landing events
+            takeoff_event = None
+            landing_event = None
+            
+            # Find the earliest takeoff and latest landing events
+            for flight_pair in entry_data['flight_pairs']:
+                takeoff_candidate = flight_pair[0]  # First event in pair (takeoff)
+                landing_candidate = flight_pair[1]  # Second event in pair (landing)
+                
+                if takeoff_event is None or takeoff_candidate.total_time < takeoff_event.total_time:
+                    takeoff_event = takeoff_candidate
+                    
+                if landing_event is None or landing_candidate.total_time > landing_event.total_time:
+                    landing_event = landing_candidate
+            
+            # Process flight points if we have both takeoff and landing
+            if takeoff_event and landing_event:
+                try:
+                    self.process_flight_points(logbook_entry, takeoff_event, landing_event)
+                except Exception as e:
+                    logger.warning(f"Failed to process flight points for logbook entry {logbook_entry.id}: {e}")
+            
             logger.info(f"Created logbook entry from constructed data: {flight_duration_hours:.2f}h "
                        f"with {len(entry_data['engine_pairs'])} engine pairs and "
                        f"{len(entry_data['flight_pairs'])} flight pairs for device {device.name}")
@@ -1816,7 +1889,7 @@ class ThingsBoardSyncService:
             
         except requests.RequestException as e:
             logger.error(f"HTTP error sending checklist to device {device_id}: {e}")
-            if hasattr(e.response, 'text'):
+            if hasattr(e, 'response') and e.response and hasattr(e.response, 'text'):
                 logger.error(f"Response body: {e.response.text}")
             return False
             
@@ -1824,7 +1897,7 @@ class ThingsBoardSyncService:
             logger.error(f"Unexpected error sending checklist to device {device_id}: {e}")
             return False
 
-    def _process_events(self, device: Device, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _process_events(self, device: Device, events: List[Dict[str, Any]], write_page: int) -> Dict[str, Any]:
         """
         Process a list of events for better performance and memory management.
         
@@ -1850,6 +1923,7 @@ class ThingsBoardSyncService:
         # Process all events at once
         for event_idx, event in enumerate(events):
             try:
+                event['write_page'] = write_page
                 if self._process_device_event(device, event):
                     result['new_events'] += 1
             except Exception as e:
@@ -1873,6 +1947,291 @@ class ThingsBoardSyncService:
                    f"{len(result['errors'])} errors")
         
         return result
+
+    def process_flight_points(self, logbook_entry: 'LogbookEntry', takeoff_event: 'Event', landing_event: 'Event') -> bool:
+        """
+        Process flight points for a logbook entry by fetching data from ThingsBoard.
+        
+        Args:
+            logbook_entry: LogbookEntry instance to add flight points to
+            takeoff_event: Event marking flight start
+            landing_event: Event marking flight end
+            
+        Returns:
+            True if successful, False if error
+        """
+        from ..models import FlightPoint, db
+        
+        device = logbook_entry.device
+        if not device or not device.external_device_id:
+            logger.warning(f"Cannot fetch flight points: no device or external_device_id for logbook entry {logbook_entry.id}")
+            return False
+        
+        # Get flight details from ThingsBoard
+        flight_data = self._thing_get_flight(device.external_device_id, takeoff_event, landing_event)
+        if not flight_data:
+            logger.warning(f"No flight data returned from ThingsBoard for logbook entry {logbook_entry.id}")
+            # Mark as fetched to avoid retrying
+            logbook_entry.flight_points_fetched = True
+            try:
+                db.session.commit()
+            except Exception:
+                pass
+            return False
+        
+        # Check response status
+        if flight_data.get('status') != 'OK':
+            logger.warning(f"ThingsBoard returned status {flight_data.get('status')} for flight data request")
+            # Mark as fetched to avoid retrying
+            logbook_entry.flight_points_fetched = True
+            try:
+                db.session.commit()
+            except Exception:
+                pass
+            return False
+        
+        # Get points from response
+        points = flight_data.get('points', [])
+        if not points:
+            logger.info(f"No flight points available for logbook entry {logbook_entry.id}")
+            # Mark as fetched even if no points
+            logbook_entry.flight_points_fetched = True
+            try:
+                db.session.commit()
+            except Exception:
+                pass
+            return True  # Not an error - just no points available
+        
+        logger.info(f"Processing {len(points)} flight points for logbook entry {logbook_entry.id}")
+        
+        # Clear existing flight points for this logbook entry
+        existing_points = FlightPoint.query.filter_by(logbook_entry_id=logbook_entry.id).all()
+        for point in existing_points:
+            db.session.delete(point)
+        
+        # Process and store new flight points
+        processed_points = 0
+        for sequence, point_data in enumerate(points):
+            try:
+                # Validate point data format
+                if not isinstance(point_data, list) or len(point_data) < 3:
+                    logger.warning(f"Invalid point data format at sequence {sequence}: {point_data}")
+                    continue
+                
+                # Extract point values
+                longitude = float(point_data[0])
+                latitude = float(point_data[1])
+                airspeed = float(point_data[2])
+                static_pressure = float(point_data[3]) if len(point_data) > 3 else None
+
+                # Create flight point (timestamp_offset is sequence * 5 seconds)
+                flight_point = FlightPoint(
+                    logbook_entry_id=logbook_entry.id,
+                    sequence=sequence,
+                    timestamp_offset=sequence * 5,  # Each point is 5 seconds apart
+                    latitude=latitude,
+                    longitude=longitude,
+                    airspeed=airspeed,
+                    static_pressure=static_pressure
+                )
+                
+                db.session.add(flight_point)
+                processed_points += 1
+                
+            except (ValueError, TypeError, IndexError) as e:
+                logger.error(f"Failed to process flight point at sequence {sequence}: {e}")
+                continue
+        
+        try:
+            db.session.commit()
+            
+            # Mark the logbook entry as having attempted flight points fetch
+            logbook_entry.flight_points_fetched = True
+            db.session.commit()
+            
+            logger.info(f"Successfully stored {processed_points} flight points for logbook entry {logbook_entry.id}")
+            
+            # Geocode departure and arrival airports from first and last flight points
+            if processed_points > 0:
+                try:
+                    self._geocode_departure_arrival_airports(logbook_entry)
+                except Exception as e:
+                    logger.warning(f"Failed to geocode airports for logbook entry {logbook_entry.id}: {e}")
+            
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            
+            # Still mark as fetched to avoid retrying
+            try:
+                logbook_entry.flight_points_fetched = True
+                db.session.commit()
+            except Exception:
+                pass  # If this fails too, we'll retry next time
+            
+            logger.error(f"Failed to commit flight points for logbook entry {logbook_entry.id}: {e}")
+            return False
+
+    def process_existing_flights_for_points(self, device: 'Device', max_entries: int = 100) -> Dict[str, Any]:
+        """
+        Process existing logbook entries for a device to fetch missing flight points.
+        Only processes entries that haven't been attempted before.
+        
+        Args:
+            device: Device to process logbook entries for
+            max_entries: Maximum number of entries to process per call
+            
+        Returns:
+            Dict with processing results
+        """
+        from ..models import LogbookEntry, Event, db
+        
+        result = {
+            'total_candidates': 0,
+            'processed': 0,
+            'successful': 0,
+            'failed': 0,
+            'errors': []
+        }
+        
+        if not device.external_device_id:
+            logger.info(f"Skipping flight points processing for device {device.name}: no external_device_id")
+            return result
+        
+        try:
+            # Find logbook entries for this device that haven't had flight points fetched
+            candidate_entries = LogbookEntry.query.filter(
+                LogbookEntry.device_id == device.id,
+                LogbookEntry.flight_points_fetched != True  # Include None and False
+            ).order_by(LogbookEntry.takeoff_datetime.desc()).limit(max_entries).all()
+            
+            result['total_candidates'] = len(candidate_entries)
+            
+            if not candidate_entries:
+                logger.debug(f"No logbook entries need flight points processing for device {device.name}")
+                return result
+            
+            logger.info(f"Processing {len(candidate_entries)} logbook entries for flight points on device {device.name}")
+            
+            for entry in candidate_entries:
+                try:
+                    result['processed'] += 1
+                    
+                    # Find takeoff and landing events for this entry
+                    takeoff_event = None
+                    landing_event = None
+                    
+                    # Look for linked events first
+                    linked_events = Event.query.filter_by(logbook_entry_id=entry.id).all()
+                    
+                    for event in linked_events:
+                        if event.has_event_bit('Takeoff'):
+                            takeoff_event = event
+                        elif event.has_event_bit('Landing'):
+                            landing_event = event
+                    
+                    # Process flight points if we have both events
+                    if takeoff_event and landing_event:
+                        if self.process_flight_points(entry, takeoff_event, landing_event):
+                            result['successful'] += 1
+                            logger.debug(f"Successfully processed flight points for logbook entry {entry.id}")
+                        else:
+                            result['failed'] += 1
+                            logger.debug(f"Failed to process flight points for logbook entry {entry.id}")
+                    else:
+                        # Mark as fetched even if we couldn't find events
+                        entry.flight_points_fetched = True
+                        result['failed'] += 1
+                        logger.warning(f"Could not find takeoff/landing events for logbook entry {entry.id}")
+                        
+                except Exception as e:
+                    result['failed'] += 1
+                    error_msg = f"Error processing flight points for logbook entry {entry.id}: {str(e)}"
+                    logger.error(error_msg)
+                    result['errors'].append(error_msg)
+                    
+                    # Still mark as fetched to avoid infinite retries
+                    try:
+                        entry.flight_points_fetched = True
+                    except Exception:
+                        pass
+            
+            # Commit all changes
+            try:
+                db.session.commit()
+                logger.info(f"Flight points processing complete for device {device.name}: "
+                           f"{result['successful']}/{result['processed']} successful")
+            except Exception as e:
+                db.session.rollback()
+                error_msg = f"Failed to commit flight points processing changes for device {device.name}: {str(e)}"
+                logger.error(error_msg)
+                result['errors'].append(error_msg)
+                
+        except Exception as e:
+            error_msg = f"Error during flight points processing for device {device.name}: {str(e)}"
+            logger.error(error_msg)
+            result['errors'].append(error_msg)
+        
+        return result
+
+    def _geocode_departure_arrival_airports(self, logbook_entry: 'LogbookEntry') -> None:
+        """
+        Geocode departure and arrival airports from first and last flight points.
+        
+        Args:
+            logbook_entry: LogbookEntry with flight points to geocode
+        """
+        from ..models import FlightPoint
+        
+        # Get first and last flight points
+        first_point = FlightPoint.query.filter_by(
+            logbook_entry_id=logbook_entry.id
+        ).order_by(FlightPoint.sequence.asc()).first()
+        
+        last_point = FlightPoint.query.filter_by(
+            logbook_entry_id=logbook_entry.id
+        ).order_by(FlightPoint.sequence.desc()).first()
+        
+        if not first_point or not last_point:
+            logger.warning(f"No flight points found for logbook entry {logbook_entry.id}")
+            return
+        
+        geocoder = get_geocoder()
+        
+        try:
+            # Geocode departure airport from first point
+            departure_location = geocoder.get_nearest_airfield(first_point.latitude, first_point.longitude)
+            if departure_location:
+                departure_icao = departure_location.get('icao', 'UNKN')
+                logger.debug(f"Departure airport for logbook entry {logbook_entry.id}: {departure_icao}")
+                
+                # Update logbook entry if it's currently unknown or generic
+                if logbook_entry.departure_airport in ['UNKN', 'UNKNOWN', None, '']:
+                    logbook_entry.departure_airport = departure_icao
+            
+            # Geocode arrival airport from last point
+            arrival_location = geocoder.get_nearest_airfield(last_point.latitude, last_point.longitude)
+            if arrival_location:
+                arrival_icao = arrival_location.get('icao', 'UNKN')
+                logger.debug(f"Arrival airport for logbook entry {logbook_entry.id}: {arrival_icao}")
+                
+                # Update logbook entry if it's currently unknown or generic
+                if logbook_entry.arrival_airport in ['UNKN', 'UNKNOWN', None, '']:
+                    logbook_entry.arrival_airport = arrival_icao
+            
+            # Commit the airport updates
+            try:
+                db.session.commit()
+                logger.info(f"Updated airports for logbook entry {logbook_entry.id}: "
+                           f"{logbook_entry.departure_airport} -> {logbook_entry.arrival_airport}")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Failed to commit airport updates for logbook entry {logbook_entry.id}: {e}")
+                
+        except Exception as e:
+            logger.error(f"Failed to geocode airports for logbook entry {logbook_entry.id}: {e}")
+
 
 
 # Create singleton instance

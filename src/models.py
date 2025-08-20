@@ -394,6 +394,7 @@ class LogbookEntry(db.Model):
     landings_night = db.Column(db.Integer, default=0)
     remarks = db.Column(db.Text)
     pilot_name = db.Column(db.String(100), nullable=True)  # Name of pilot as recorded in logbook
+    flight_points_fetched = db.Column(db.Boolean, default=False)  # Track if flight points fetch was attempted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -472,6 +473,28 @@ class LogbookEntry(db.Model):
     
     def __repr__(self):
         return f'<LogbookEntry {self.date} {self.aircraft_registration}>'
+
+
+class FlightPoint(db.Model):
+    """Flight point model for storing GPS and flight data points."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    latitude = db.Column(db.Float, nullable=False)  # Latitude in decimal degrees
+    longitude = db.Column(db.Float, nullable=False)  # Longitude in decimal degrees
+    airspeed = db.Column(db.Float, nullable=True)  # Airspeed in knots or m/s
+    static_pressure = db.Column(db.Float, nullable=True)  # Static pressure in Pa or other units
+    sequence = db.Column(db.Integer, nullable=False)  # Order of point in flight (0-based)
+    timestamp_offset = db.Column(db.Integer, nullable=False)  # Seconds from flight start
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Foreign keys
+    logbook_entry_id = db.Column(db.Integer, db.ForeignKey('logbook_entry.id'), nullable=False)
+    
+    # Relationships
+    logbook_entry = db.relationship('LogbookEntry', backref=db.backref('flight_points', lazy=True, cascade='all, delete-orphan'))
+    
+    def __repr__(self):
+        return f'<FlightPoint {self.logbook_entry_id}:{self.sequence} {self.latitude},{self.longitude}>'
 
 
 class InitialLogbookTime(db.Model):
