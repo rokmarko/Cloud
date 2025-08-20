@@ -5,14 +5,14 @@ After=network.target
 Wants=network.target
 
 [Service]
-Type=notify
+Type=exec
 User=rok
 Group=rok
-WorkingDirectory=/home/rok/Cloud
-Environment=PATH=/home/rok/Cloud/.venv/bin
+WorkingDirectory=/home/rok/src/Cloud-1
+Environment=PATH=/home/rok/src/Cloud-1/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=FLASK_ENV=production
 Environment=FLASK_DEBUG=0
-ExecStart=/home/rok/Cloud/.venv/bin/gunicorn --config gunicorn.conf.py wsgi:app
+ExecStart=/home/rok/src/Cloud-1/start_production.sh
 ExecReload=/bin/kill -s HUP $MAINPID
 ExecStop=/bin/kill -s TERM $MAINPID
 Restart=always
@@ -23,10 +23,8 @@ SyslogIdentifier=kanardiacloud
 
 # Security settings
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/home/rok/Cloud/instance
+ReadWritePaths=/home/rok/src/Cloud-1/instance
+ReadWritePaths=/home/rok/src/Cloud-1/logs
 ReadWritePaths=/var/log/kanardiacloud
 ReadWritePaths=/var/run/kanardiacloud
 

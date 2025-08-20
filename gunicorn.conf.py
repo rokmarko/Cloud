@@ -9,7 +9,7 @@ import os
 
 # Basic settings
 bind = "127.0.0.1:5000"
-workers = multiprocessing.cpu_count() * 2 + 1
+workers = multiprocessing.cpu_count() + 1
 worker_class = "sync"
 worker_connections = 1000
 max_requests = 1000
@@ -48,6 +48,12 @@ raw_env = [
 # Worker lifecycle
 def on_starting(server):
     """Called just before the master process is initialized."""
+    # Create necessary directories
+    import os
+    os.makedirs('/var/log/kanardiacloud', mode=0o755, exist_ok=True)
+    os.makedirs('/var/run/kanardiacloud', mode=0o755, exist_ok=True)
+    os.makedirs('logs', mode=0o755, exist_ok=True)
+    
     server.log.info("Starting Gunicorn server for KanardiaCloud")
 
 def on_reload(server):

@@ -4,11 +4,13 @@ Flask application factory
 
 import os
 import logging
+from pathlib import Path
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect
+from dotenv import load_dotenv
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -19,6 +21,26 @@ csrf = CSRFProtect()
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def load_environment_variables():
+    """Load environment variables from .env files."""
+    base_dir = Path(__file__).parent.parent
+    
+    # Try production env first, then fallback to .env
+    env_files = ['.env.production', '.env']
+    
+    for env_file in env_files:
+        env_path = base_dir / env_file
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=False)
+            logger.info(f"Environment loaded from {env_file}")
+            return env_file
+    
+    logger.warning("No .env file found")
+    return None
+
+# Load environment variables at module level
+load_environment_variables()
 
 
 def create_app():
