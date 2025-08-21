@@ -129,6 +129,11 @@
                                         <span class="material-icons me-2">edit</span> Rename
                                     </a>
                                 </li>
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick="shareInstrumentLayout({{ layout.id }}, '{{ layout.title }}')">
+                                        <span class="material-icons me-2">share</span> Share
+                                    </a>
+                                </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <a class="dropdown-item text-danger" href="#" onclick="deleteInstrumentLayout({{ layout.id }})">
@@ -185,6 +190,76 @@
                 </button>
                 <button type="button" class="btn btn-primary" onclick="submitRenameLayout()">
                     <span class="material-icons me-1">save</span> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Share Layout Modal -->
+<div class="modal fade" id="shareLayoutModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span class="material-icons me-2">share</span>
+                    Share Instrument Layout
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="text-muted">Choose how you'd like to share this instrument layout:</p>
+                </div>
+                
+                <form id="shareLayoutForm">
+                    <input type="hidden" id="shareLayoutId" value="">
+                    <input type="hidden" id="shareLayoutTitle" value="">
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="shareType" id="shareToKanardia" value="kanardia" checked>
+                            <label class="form-check-label" for="shareToKanardia">
+                                <strong>Send to Kanardia</strong>
+                                <div class="text-muted small">Share with Kanardia team (sales@kanardia.eu)</div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="shareType" id="shareToSelf" value="self">
+                            <label class="form-check-label" for="shareToSelf">
+                                <strong>Send to my email</strong>
+                                <div class="text-muted small">Send to {{ current_user.email }}</div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="shareType" id="shareToCustom" value="custom">
+                            <label class="form-check-label" for="shareToCustom">
+                                <strong>Send to custom email</strong>
+                            </label>
+                        </div>
+                        <div class="mt-2" id="customEmailGroup" style="display: none;">
+                            <input type="email" class="form-control" id="customEmail" placeholder="Enter email address..." maxlength="254">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="shareMessage" class="form-label">Message (Optional)</label>
+                        <textarea class="form-control" id="shareMessage" rows="3" maxlength="500" placeholder="Add a message to include with the shared layout..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <span class="material-icons me-1">close</span> Cancel
+                </button>
+                <button type="button" class="btn btn-primary" onclick="submitShareLayout()">
+                    <span class="material-icons me-1">send</span> Share Layout
                 </button>
             </div>
         </div>
@@ -764,6 +839,113 @@ function submitRenameLayout() {
         alert('Error renaming instrument layout. Please try again.');
     });
 }
+
+/**
+ * Open the share layout modal
+ * @param {number} layoutId - The ID of the layout to share
+ * @param {string} layoutTitle - The title of the layout
+ */
+function shareInstrumentLayout(layoutId, layoutTitle) {
+    // Set modal values
+    document.getElementById('shareLayoutId').value = layoutId;
+    document.getElementById('shareLayoutTitle').value = layoutTitle;
+    
+    // Reset form
+    document.getElementById('shareToKanardia').checked = true;
+    document.getElementById('customEmail').value = '';
+    document.getElementById('shareMessage').value = '';
+    document.getElementById('customEmailGroup').style.display = 'none';
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('shareLayoutModal'));
+    modal.show();
+}
+
+/**
+ * Submit the share layout form
+ */
+function submitShareLayout() {
+    const layoutId = document.getElementById('shareLayoutId').value;
+    const shareType = document.querySelector('input[name="shareType"]:checked').value;
+    const customEmail = document.getElementById('customEmail').value;
+    const message = document.getElementById('shareMessage').value;
+    
+    // Validation
+    if (shareType === 'custom' && (!customEmail || !customEmail.trim())) {
+        alert('Please enter a custom email address.');
+        return;
+    }
+    
+    // Validate email format for custom email
+    if (shareType === 'custom') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(customEmail.trim())) {
+            alert('Please enter a valid email address.');
+            return;
+        }
+    }
+    
+    // Show loading state
+    const submitBtn = document.querySelector('#shareLayoutModal .btn-primary');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="material-icons me-1 spinner-border spinner-border-sm" role="status"></span> Sending...';
+    
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    fetch(`/dashboard/api/instrument-layout/${layoutId}/share`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            share_type: shareType,
+            custom_email: customEmail.trim(),
+            message: message.trim()
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Hide modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('shareLayoutModal'));
+            modal.hide();
+            
+            // Show success message
+            alert(data.message || 'Instrument layout shared successfully!');
+        } else {
+            throw new Error(data.message || 'Failed to share layout');
+        }
+    })
+    .catch(error => {
+        console.error('Error sharing instrument layout:', error);
+        alert('Error sharing instrument layout: ' + error.message);
+    })
+    .finally(() => {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+}
+
+// Handle radio button changes for share type
+document.addEventListener('DOMContentLoaded', function() {
+    const shareTypeRadios = document.querySelectorAll('input[name="shareType"]');
+    const customEmailGroup = document.getElementById('customEmailGroup');
+    
+    shareTypeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'custom') {
+                customEmailGroup.style.display = 'block';
+                document.getElementById('customEmail').focus();
+            } else {
+                customEmailGroup.style.display = 'none';
+            }
+        });
+    });
+});
 </script>
 
 <style>

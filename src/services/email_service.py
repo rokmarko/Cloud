@@ -293,3 +293,99 @@ Timestamp: {{ timestamp }}
         except Exception as e:
             logging.error(f"Failed to send test email to {recipient_email}: {str(e)}")
             return False
+
+    @staticmethod
+    def send_email_with_attachment(to_email, subject, body, attachment_path, attachment_filename, attachment_type='application/octet-stream'):
+        """
+        Send email with file attachment.
+        
+        Args:
+            to_email (str): Recipient email address
+            subject (str): Email subject
+            body (str): Email body text
+            attachment_path (str): Path to the file to attach
+            attachment_filename (str): Name for the attachment file
+            attachment_type (str): MIME type of attachment
+        
+        Returns:
+            bool: True if email sent successfully, False otherwise
+        """
+        try:
+            # Create message
+            msg = Message(
+                subject=subject,
+                recipients=[to_email],
+                body=body
+            )
+            
+            # Add attachment
+            with current_app.open_resource(attachment_path, 'rb') if attachment_path.startswith('/') else open(attachment_path, 'rb') as fp:
+                msg.attach(
+                    attachment_filename,
+                    attachment_type,
+                    fp.read()
+                )
+            
+            # Send email
+            mail.send(msg)
+            
+            logging.info(f"Email with attachment sent successfully to {to_email}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Failed to send email with attachment to {to_email}: {str(e)}")
+            return False
+
+    @staticmethod
+    def send_email_with_multiple_attachments(to_email, subject, body, attachments):
+        """
+        Send email with multiple file attachments.
+        
+        Args:
+            to_email (str): Recipient email address
+            subject (str): Email subject
+            body (str): Email body text
+            attachments (list): List of attachment dictionaries with keys:
+                - path: str - Path to the file to attach
+                - filename: str - Name for the attachment file
+                - mime_type: str - MIME type of attachment
+                - data: bytes (optional) - Raw file data instead of path
+        
+        Returns:
+            bool: True if email sent successfully, False otherwise
+        """
+        try:
+            # Create message
+            msg = Message(
+                subject=subject,
+                recipients=[to_email],
+                body=body
+            )
+            
+            # Add attachments
+            for attachment in attachments:
+                if 'data' in attachment:
+                    # Use raw data directly
+                    msg.attach(
+                        attachment['filename'],
+                        attachment['mime_type'],
+                        attachment['data']
+                    )
+                else:
+                    # Read from file path
+                    with current_app.open_resource(attachment['path'], 'rb') if attachment['path'].startswith('/') else open(attachment['path'], 'rb') as fp:
+                        msg.attach(
+                            attachment['filename'],
+                            attachment['mime_type'],
+                            fp.read()
+                        )
+            
+            # Send email
+            mail.send(msg)
+            
+            logging.info(f"Email with {len(attachments)} attachments sent successfully to {to_email}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Failed to send email with attachments to {to_email}: {str(e)}")
+            return False

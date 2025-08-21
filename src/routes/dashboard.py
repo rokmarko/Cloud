@@ -702,6 +702,29 @@ def export_checklist(checklist_id):
     
     return response
 
+@dashboard_bp.route('/checklists/<int:checklist_id>/print')
+@login_required
+def print_checklist(checklist_id):
+    """Generate printable version of checklist."""
+    checklist = Checklist.query.filter_by(id=checklist_id, user_id=current_user.id).first_or_404()
+    
+    # Check if minimal version is requested
+    minimal = request.args.get('minimal', '').lower() in ['true', '1', 'yes']
+    
+    # Parse the checklist JSON content
+    try:
+        checklist_data = json.loads(checklist.json_content)
+    except (json.JSONDecodeError, TypeError):
+        flash('Error reading checklist data.', 'error')
+        return redirect(url_for('dashboard.checklists'))
+    
+    return render_template('dashboard/print_checklist.html', 
+                         title=f'Print - {checklist.title}',
+                         checklist=checklist, 
+                         checklist_data=checklist_data,
+                         print_timestamp=datetime.now(),
+                         minimal=minimal)
+
 @dashboard_bp.route('/api/checklist/<int:checklist_id>/load_json')
 @login_required
 def load_checklist(checklist_id):
@@ -1716,6 +1739,183 @@ def api_update_instrument_layout_thumbnail(layout_id):
         return jsonify({
             'success': False,
             'message': 'Error updating thumbnail'
+        }), 500
+
+
+@dashboard_bp.route('/api/instrument-layout/<int:layout_id>/share', methods=['POST'])
+@login_required
+def api_share_instrument_layout(layout_id):
+    """Share an instrument layout via email."""
+    layout = InstrumentLayout.query.filter_by(
+        id=layout_id, 
+        user_id=current_user.id, 
+        is_active=True
+    ).first_or_404()
+    
+    request_data = request.get_json()
+    share_type = request_data.get('share_type', '').strip()
+    custom_email = request_data.get('custom_email', '').strip()
+    user_message = request_data.get('message', '').strip()
+    
+    # Validate share type
+    if share_type not in ['kanardia', 'self', 'custom']:
+        return jsonify({
+            'success': False,
+            'message': 'Invalid share type'
+        }), 400
+    
+    # Validate custom email if needed
+    if share_type == 'custom':
+        if not custom_email:
+            return jsonify({
+                'success': False,
+                'message': 'Custom email address is required'
+            }), 400
+        
+        # Basic email validation
+        import re
+        email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        if not re.match(email_regex, custom_email):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid email address format'
+            }), 400
+    
+    try:
+        from src.services.email_service import EmailService
+        email_service = EmailService()
+        
+        # Determine recipient email
+        if share_type == 'kanardia':
+            recipient_email = 'sales@kanardia.eu'
+            recipient_name = 'Kanardia Sales Team'
+        elif share_type == 'self':
+            recipient_email = current_user.email
+            recipient_name = current_user.full_name or current_user.nickname
+        else:  # custom
+            recipient_email = custom_email
+            recipient_name = custom_email
+        
+        # Prepare email content
+        subject = f'Shared Instrument Layout: {layout.title}'
+        
+        # Build email body
+        email_body_lines = [
+            f'Hello {recipient_name},',
+            '',
+            f'{current_user.full_name or current_user.nickname} ({current_user.email}) has shared an instrument layout with you.',
+            '',
+            f'Layout Name: {layout.title}',
+            f'Layout Type: {layout.instrument_type.replace("_", " ").title()}' if layout.instrument_type else 'Unknown',
+            f'Description: {layout.description or "No description provided"}',
+            f'Created: {layout.created_at.strftime("%B %d, %Y")}',
+            ''
+        ]
+        
+        if user_message:
+            email_body_lines.extend([
+                'Message from sender:',
+                f'"{user_message}"',
+                ''
+            ])
+        
+        email_body_lines.extend([
+            'The instrument layout file and preview thumbnail are attached to this email.',
+            '',
+            'Best regards,',
+            'KanardiaCloud System'
+        ])
+        
+        email_body = '\n'.join(email_body_lines)
+        
+        # Prepare attachments
+        import tempfile
+        import os
+        import base64
+        
+        attachments = []
+        temp_files = []
+        
+        try:
+            # Clean the filename for attachments
+            import re
+            safe_filename = re.sub(r'[^\w\s-]', '', layout.title)
+            safe_filename = re.sub(r'[-\s]+', '_', safe_filename)
+            
+            # 1. XML layout file attachment
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.xml', encoding='utf-8') as temp_xml_file:
+                temp_xml_file.write(layout.xml_content)
+                temp_xml_filename = temp_xml_file.name
+                temp_files.append(temp_xml_filename)
+                
+                attachments.append({
+                    'path': temp_xml_filename,
+                    'filename': f'instrument_layout_{safe_filename}.xml',
+                    'mime_type': 'application/xml'
+                })
+            
+            # 2. PNG thumbnail attachment (if available)
+            if layout.thumbnail_base64:
+                try:
+                    # Decode base64 thumbnail data
+                    thumbnail_data = base64.b64decode(layout.thumbnail_base64)
+                    
+                    attachments.append({
+                        'data': thumbnail_data,
+                        'filename': f'instrument_layout_{safe_filename}_preview.png',
+                        'mime_type': 'image/png'
+                    })
+                except Exception as e:
+                    # Log but don't fail the email send if thumbnail processing fails
+                    import logging
+                    logging.warning(f"Failed to process thumbnail for layout {layout_id}: {e}")
+            elif layout.thumbnail_filename:
+                # Legacy thumbnail file handling
+                thumbnail_path = os.path.join(current_app.static_folder, 'thumbnails', 'instrument_layouts', layout.thumbnail_filename)
+                if os.path.exists(thumbnail_path):
+                    attachments.append({
+                        'path': thumbnail_path,
+                        'filename': f'instrument_layout_{safe_filename}_preview.png',
+                        'mime_type': 'image/png'
+                    })
+            
+            # Send email with multiple attachments
+            success = email_service.send_email_with_multiple_attachments(
+                to_email=recipient_email,
+                subject=subject,
+                body=email_body,
+                attachments=attachments
+            )
+            
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files:
+                try:
+                    os.unlink(temp_file)
+                except OSError:
+                    pass  # File might already be deleted
+        
+        if success:
+            # Log the share action
+            import logging
+            logging.info(f"User {current_user.id} shared instrument layout {layout_id} to {recipient_email}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Instrument layout successfully shared with {recipient_email}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to send email. Please try again later.'
+            }), 500
+            
+    except Exception as e:
+        import logging
+        logging.error(f"Error sharing instrument layout {layout_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred while sharing the layout. Please try again.'
         }), 500
 
 

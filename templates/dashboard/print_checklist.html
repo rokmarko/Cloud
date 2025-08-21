@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ checklist.title }} - Printable Checklist</title>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { margin: 0; }
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.4;
+            margin: 20px;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #FF5722;
+            padding-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            color: #FF5722;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header .subtitle {
+            font-size: 1.1em;
+            color: #666;
+            margin-top: 10px;
+        }
+        
+        .print-controls {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #FF5722;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 0 10px;
+            font-weight: 500;
+        }
+        
+        .btn:hover {
+            background: #E64A19;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: #FF5722;
+            margin-bottom: 20px;
+            font-weight: 600;
+            border-bottom: 2px solid #FF5722;
+            padding-bottom: 10px;
+        }
+        
+        .checklists-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            align-items: start;
+        }
+        
+        .checklists-container.minimal {
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        .checklist-card {
+            background: #fff;
+            border: 2px solid #999;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            break-inside: avoid;
+            margin-bottom: 0; /* Remove margin since grid gap handles spacing */
+        }
+        
+        .minimal .checklist-card {
+            padding: 12px;
+        }
+        
+        .checklist-title {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+        
+        .checklist-title .icon {
+            margin-right: 10px;
+            width: 24px;
+            height: 24px;
+            background: #FF5722;
+            border-radius: 3px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        
+        .title-content {
+            flex: 1;
+        }
+        
+        .checklist-name {
+            font-weight: 600;
+        }
+        
+        .section-name {
+            font-size: 0.8em;
+            color: #666;
+            font-weight: normal;
+            margin-top: 2px;
+        }
+        
+        .checklist-items {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 10px;
+            border-left: 3px solid #FF5722;
+            background: #fafafa;
+            border-radius: 5px;
+            break-inside: avoid;
+        }
+        
+        .checkbox {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #FF5722;
+            border-radius: 3px;
+            margin-right: 10px;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        
+        .item-content {
+            flex: 1;
+            min-width: 0; /* Allows text to wrap properly in grid */
+        }
+        
+        .item-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 3px;
+            line-height: 1.2;
+            word-wrap: break-word;
+        }
+        
+        .item-action {
+            color: #666;
+            font-style: italic;
+            line-height: 1.2;
+            font-size: 0.9em;
+            word-wrap: break-word;
+        }
+        
+        .item-action.empty {
+            color: #999;
+            font-size: 0.9em;
+        }
+        
+        /* Responsive design for different screen sizes */
+        @media (max-width: 768px) {
+            .checklists-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .checklists-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (min-width: 1025px) {
+            .checklists-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        .metadata {
+            margin-top: 40px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .metadata h3 {
+            margin-top: 0;
+            color: #FF5722;
+        }
+        
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .metadata-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .metadata-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .metadata-value {
+            color: #666;
+        }
+        
+        .empty-section {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 40px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px dashed #ccc;
+        }
+        
+        @page {
+            margin: 0.75in;
+            size: A4;
+        }
+        
+        @media print {
+            .section {
+                page-break-inside: avoid;
+            }
+            
+            .checklists-container {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+            
+            .checklists-container.minimal {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                margin-top: 10px;
+            }
+            
+            .checklist-card {
+                page-break-inside: avoid;
+                box-shadow: none;
+                border: 2px solid #333;
+                margin-bottom: 0;
+                padding: 15px;
+            }
+            
+            .minimal .checklist-card {
+                padding: 8px;
+            }
+            
+            .checklist-title {
+                font-size: 1.1em;
+                margin-bottom: 12px;
+            }
+            
+            .minimal .checklist-title {
+                font-size: 1em;
+                margin-bottom: 8px;
+            }
+            
+            .checklist-items {
+                gap: 4px;
+            }
+            
+            .minimal .checklist-items {
+                gap: 3px;
+            }
+            
+            .checklist-item {
+                padding: 6px;
+                break-inside: avoid;
+            }
+            
+            .minimal .checklist-item {
+                padding: 4px;
+            }
+            
+            .item-title {
+                font-size: 0.85em;
+            }
+            
+            .minimal .item-title {
+                font-size: 0.8em;
+            }
+            
+            .item-action {
+                font-size: 0.8em;
+            }
+            
+            .minimal .item-action {
+                font-size: 0.75em;
+            }
+            
+            .section-name {
+                font-size: 0.7em;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% if not minimal %}
+    <div class="header">
+        <h1>{{ checklist.title }}</h1>
+        <div class="subtitle">
+            {% if checklist.description %}
+                {{ checklist.description }}
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="print-controls no-print">
+        <button onclick="window.print()" class="btn">
+            🖨️ Print Checklist
+        </button>
+        <a href="{{ url_for('dashboard.checklists') }}" class="btn btn-secondary">
+            ← Back to Checklists
+        </a>
+        <a href="{{ url_for('dashboard.print_checklist', checklist_id=checklist.id, minimal=true) }}" class="btn btn-secondary">
+            📋 Minimal Version
+        </a>
+    </div>
+    {% else %}
+    <div class="print-controls no-print">
+        <button onclick="window.print()" class="btn">
+            🖨️ Print Minimal
+        </button>
+        <a href="{{ url_for('dashboard.checklists') }}" class="btn btn-secondary">
+            ← Back to Checklists
+        </a>
+        <a href="{{ url_for('dashboard.print_checklist', checklist_id=checklist.id) }}" class="btn btn-secondary">
+            📄 Full Version
+        </a>
+    </div>
+    {% endif %}
+    
+    {% set root = checklist_data.get('Root', {}) %}
+    {% set children = root.get('Children', []) %}
+    
+    {% if children %}
+        {% if minimal %}
+            {# Minimal version: show all checklists together without sections #}
+            <div class="checklists-container minimal">
+                {% for section in children %}
+                    {% if section.get('Type') == 0 %}  {# Section type #}
+                        {% set section_children = section.get('Children', []) %}
+                        {% if section_children %}
+                            {% for checklist_item in section_children %}
+                                {% if checklist_item.get('Type') == 1 %}  {# Checklist type #}
+                                    <div class="checklist-card">
+                                        <div class="checklist-title">
+                                            <span class="icon">✓</span>
+                                            <div class="title-content">
+                                                <div class="checklist-name">
+                                                    {% set checklist_name = checklist_item.get('Name', 'Unnamed Checklist') %}
+                                                    {% if checklist_name == 'Checklist' %}
+                                                        {{ checklist_name }} {{ loop.index }}
+                                                    {% else %}
+                                                        {{ checklist_name }}
+                                                    {% endif %}
+                                                </div>
+                                                <div class="section-name">{{ section.get('Name', 'Unnamed Section') }}</div>
+                                            </div>
+                                        </div>
+                                        
+                                        {% set items = checklist_item.get('Items', []) %}
+                                        {% if items %}
+                                            <ul class="checklist-items">
+                                                {% for item in items %}
+                                                    <li class="checklist-item">
+                                                        <div class="checkbox"></div>
+                                                        <div class="item-content">
+                                                            <div class="item-title">
+                                                                {{ item.get('Title', 'Set item title') }}
+                                                            </div>
+                                                            {% set action = item.get('Action', '') %}
+                                                            {% if action and action != 'Set response action' %}
+                                                                <div class="item-action">
+                                                                    {{ action }}
+                                                                </div>
+                                                            {% elif not action or action == 'Set response action' %}
+                                                                <div class="item-action empty">
+                                                                    (Action to be defined)
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <div class="empty-section">
+                                                No checklist items defined
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            {# Full version: show sections with titles #}
+            {% for section in children %}
+                {% if section.get('Type') == 0 %}  {# Section type #}
+                    <div class="section">
+                        <h2 class="section-title">{{ section.get('Name', 'Unnamed Section') }}</h2>
+                        
+                        {% set section_children = section.get('Children', []) %}
+                        {% if section_children %}
+                            <div class="checklists-container">
+                                {% for checklist_item in section_children %}
+                                    {% if checklist_item.get('Type') == 1 %}  {# Checklist type #}
+                                        <div class="checklist-card">
+                                            <div class="checklist-title">
+                                                <span class="icon">✓</span>
+                                                {% set checklist_name = checklist_item.get('Name', 'Unnamed Checklist') %}
+                                                {% if checklist_name == 'Checklist' %}
+                                                    {{ checklist_name }} {{ loop.index }}
+                                                {% else %}
+                                                    {{ checklist_name }}
+                                                {% endif %}
+                                            </div>
+                                            
+                                            {% set items = checklist_item.get('Items', []) %}
+                                            {% if items %}
+                                                <ul class="checklist-items">
+                                                    {% for item in items %}
+                                                        <li class="checklist-item">
+                                                            <div class="checkbox"></div>
+                                                            <div class="item-content">
+                                                                <div class="item-title">
+                                                                    {{ item.get('Title', 'Set item title') }}
+                                                                </div>
+                                                                {% set action = item.get('Action', '') %}
+                                                                {% if action and action != 'Set response action' %}
+                                                                    <div class="item-action">
+                                                                        {{ action }}
+                                                                    </div>
+                                                                {% elif not action or action == 'Set response action' %}
+                                                                    <div class="item-action empty">
+                                                                        (Action to be defined)
+                                                                    </div>
+                                                                {% endif %}
+                                                            </div>
+                                                        </li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% else %}
+                                                <div class="empty-section">
+                                                    No checklist items defined
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="empty-section">
+                                No checklists in this section
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% else %}
+        <div class="empty-section">
+            No checklist sections found
+        </div>
+    {% endif %}
+    
+    {% if not minimal %}
+    <div class="metadata">
+        <h3>Checklist Information</h3>
+        <div class="metadata-grid">
+            <div class="metadata-item">
+                <span class="metadata-label">Title:</span>
+                <span class="metadata-value">{{ checklist.title }}</span>
+            </div>
+            {% if checklist.description %}
+            <div class="metadata-item">
+                <span class="metadata-label">Description:</span>
+                <span class="metadata-value">{{ checklist.description }}</span>
+            </div>
+            {% endif %}
+            <div class="metadata-item">
+                <span class="metadata-label">Created:</span>
+                <span class="metadata-value">{{ checklist.created_at.strftime('%B %d, %Y') }}</span>
+            </div>
+            {% if checklist.updated_at and checklist.updated_at > checklist.created_at %}
+            <div class="metadata-item">
+                <span class="metadata-label">Last Modified:</span>
+                <span class="metadata-value">{{ checklist.updated_at.strftime('%B %d, %Y') }}</span>
+            </div>
+            {% endif %}
+            <div class="metadata-item">
+                <span class="metadata-label">Language:</span>
+                <span class="metadata-value">{{ checklist_data.get('Language', 'en-gb') }}</span>
+            </div>
+            {% if checklist_data.get('Voice') %}
+            <div class="metadata-item">
+                <span class="metadata-label">Voice:</span>
+                <span class="metadata-value">{{ checklist_data.get('Voice') }}</span>
+            </div>
+            {% endif %}
+            <div class="metadata-item">
+                <span class="metadata-label">Printed:</span>
+                <span class="metadata-value">{{ print_timestamp.strftime('%B %d, %Y at %H:%M') }}</span>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">Generated by:</span>
+                <span class="metadata-value">KanardiaCloud Checklist System</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <script>
+        // Auto-focus print button for better UX
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add keyboard shortcut for printing
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'p') {
+                    e.preventDefault();
+                    window.print();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

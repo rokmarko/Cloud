@@ -184,6 +184,11 @@
                                         <span class="material-icons me-2">send</span> Send To Device
                                     </a>
                                 </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('dashboard.print_checklist', checklist_id=checklist.id) }}" target="_blank">
+                                        <span class="material-icons me-2">print</span> Printable Version
+                                    </a>
+                                </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <a class="dropdown-item" href="#" onclick="renameChecklist({{ checklist.id }}, '{{ checklist.title }}', '{{ checklist.description or '' }}')">
