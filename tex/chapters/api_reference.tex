@@ -1,0 +1,176 @@
+\chapter{API Reference}
+
+\section{Overview}
+
+KanardiaCloud provides a RESTful API for third-party integrations and custom applications. This chapter covers the essential API endpoints and usage examples.
+
+\section{Authentication}
+
+\subsection{API Key Authentication}
+
+To access the API:
+
+\begin{enumerate}
+    \item Generate API key in user settings
+    \item Include key in request headers
+    \item Use HTTPS for all requests
+    \item Monitor usage and rate limits
+\end{enumerate}
+
+Example request:
+\begin{lstlisting}[language=bash]
+curl -X GET "https://api.kanardiacloud.com/v1/devices" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json"
+\end{lstlisting}
+
+\section{Core Endpoints}
+
+\subsection{Device Management}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+GET & /api/v1/devices & List all devices \\
+POST & /api/v1/devices & Add new device \\
+GET & /api/v1/devices/\{id\} & Get device details \\
+PUT & /api/v1/devices/\{id\} & Update device \\
+DELETE & /api/v1/devices/\{id\} & Remove device \\
+\bottomrule
+\end{tabular}
+\caption{Device Management API Endpoints}
+\label{tab:device_api}
+\end{table}
+
+\subsection{Logbook Management}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+GET & /api/v1/logbook & List logbook entries \\
+POST & /api/v1/logbook & Create new entry \\
+GET & /api/v1/logbook/\{id\} & Get entry details \\
+PUT & /api/v1/logbook/\{id\} & Update entry \\
+DELETE & /api/v1/logbook/\{id\} & Delete entry \\
+\bottomrule
+\end{tabular}
+\caption{Logbook API Endpoints}
+\label{tab:logbook_api}
+\end{table}
+
+\subsection{Checklist Management}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Endpoint} & \textbf{Description} \\
+\midrule
+GET & /api/v1/checklists & List all checklists \\
+POST & /api/v1/checklists & Create new checklist \\
+GET & /api/v1/checklists/\{id\} & Get checklist details \\
+PUT & /api/v1/checklists/\{id\} & Update checklist \\
+DELETE & /api/v1/checklists/\{id\} & Delete checklist \\
+\bottomrule
+\end{tabular}
+\caption{Checklist API Endpoints}
+\label{tab:checklist_api}
+\end{table}
+
+\section{Data Formats}
+
+\subsection{Request/Response Format}
+
+All API endpoints use JSON format:
+
+\begin{lstlisting}[language=json]
+{
+  "success": true,
+  "data": {
+    "id": 123,
+    "name": "Example Device",
+    "status": "active",
+    "lastSync": "2025-08-21T10:30:00Z"
+  },
+  "message": "Operation completed successfully"
+}
+\end{lstlisting}
+
+\subsection{Error Handling}
+
+Error responses include:
+
+\begin{lstlisting}[language=json]
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Required field 'name' is missing",
+    "details": {
+      "field": "name",
+      "required": true
+    }
+  }
+}
+\end{lstlisting}
+
+\section{Rate Limits}
+
+\subsection{Usage Limits}
+
+API usage is subject to rate limits:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Plan} & \textbf{Requests per Hour} \\
+\midrule
+Basic & 1,000 \\
+Professional & 5,000 \\
+Enterprise & 20,000 \\
+\bottomrule
+\end{tabular}
+\caption{API Rate Limits}
+\label{tab:rate_limits}
+\end{table}
+
+\subsection{Rate Limit Headers}
+
+Response headers include:
+
+\begin{itemize}
+    \item \texttt{X-RateLimit-Limit}: Maximum requests allowed
+    \item \texttt{X-RateLimit-Remaining}: Requests remaining in current window
+    \item \texttt{X-RateLimit-Reset}: Time when limit resets
+\end{itemize}
+
+\section{SDK and Libraries}
+
+\subsection{Official SDKs}
+
+Kanardia provides SDKs for:
+
+\begin{itemize}
+    \item Python
+    \item JavaScript/Node.js
+    \item Java
+    \item C\#/.NET
+\end{itemize}
+
+\subsection{Community Libraries}
+
+Third-party libraries available for:
+
+\begin{itemize}
+    \item PHP
+    \item Ruby
+    \item Go
+    \item Swift
+\end{itemize}

@@ -1,0 +1,122 @@
+\chapter{File Formats and Specifications}
+
+\section{Checklist File Formats}
+
+\subsection{Kanardia CKL Format}
+
+The native Kanardia checklist format uses a hierarchical structure:
+
+\begin{lstlisting}[language=json]
+{
+  "Root": {
+    "Children": [
+      {
+        "Type": 0,
+        "Name": "Pre-flight",
+        "Children": [
+          {
+            "Type": 1,
+            "Name": "External Inspection",
+            "Items": [
+              {
+                "Title": "Aircraft General Condition",
+                "Action": "CHECK"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Language": "en-gb",
+  "Voice": "Default"
+}
+\end{lstlisting}
+
+\subsection{Type Definitions}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Type Value} & \textbf{Element Type} \\
+\midrule
+0 & Section (container for checklists) \\
+1 & Checklist (container for items) \\
+2 & Item (individual checklist step) \\
+\bottomrule
+\end{tabular}
+\caption{CKL Element Types}
+\label{tab:ckl_types}
+\end{table}
+
+\section{Import/Export Formats}
+
+\subsection{Supported File Types}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{Format} & \textbf{Extension} & \textbf{Description} \\
+\midrule
+Kanardia CKL & .ckl & Native checklist format \\
+JSON & .json & Standard JSON format \\
+XML & .xml & Structured XML data \\
+CSV & .csv & Comma-separated values \\
+PDF & .pdf & Portable document (charts) \\
+PNG & .png & Portable network graphics \\
+JPEG & .jpg, .jpeg & Joint photographic experts group \\
+\bottomrule
+\end{tabular}
+\caption{Supported File Formats}
+\label{tab:file_formats}
+\end{table}
+
+\section{Data Schema Specifications}
+
+\subsection{Device Data Schema}
+
+Device information structure:
+
+\begin{lstlisting}[language=json]
+{
+  "deviceId": "string",
+  "name": "string",
+  "type": "NESIS_III|NESIS_IV|KRT2|KTX2",
+  "serialNumber": "string",
+  "firmwareVersion": "string",
+  "status": "active|inactive|error",
+  "lastSync": "ISO 8601 datetime",
+  "configuration": {
+    "syncInterval": "number (minutes)",
+    "dataTypes": ["logbook", "checklists", "layouts"]
+  }
+}
+\end{lstlisting}
+
+\subsection{Logbook Entry Schema}
+
+Flight entry data structure:
+
+\begin{lstlisting}[language=json]
+{
+  "entryId": "string",
+  "date": "ISO 8601 date",
+  "aircraft": {
+    "registration": "string",
+    "type": "string"
+  },
+  "departure": {
+    "airport": "ICAO code",
+    "time": "ISO 8601 datetime"
+  },
+  "arrival": {
+    "airport": "ICAO code", 
+    "time": "ISO 8601 datetime"
+  },
+  "flightTime": "number (hours)",
+  "picTime": "number (hours)",
+  "remarks": "string"
+}
+\end{lstlisting}

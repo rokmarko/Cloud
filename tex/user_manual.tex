@@ -1,0 +1,191 @@
+\documentclass[12pt,a4paper]{book}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{tocloft}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{subcaption}
+
+% Page geometry
+\geometry{margin=2.5cm, headheight=15pt}
+
+% Define Kanardia colors
+\definecolor{kanardiaOrange}{RGB}{255,87,34}
+\definecolor{kanardiaGray}{RGB}{102,102,102}
+\definecolor{lightGray}{RGB}{245,245,245}
+
+% Hyperlink setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=kanardiaOrange,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={KanardiaCloud User Manual},
+    pdfauthor={Kanardia d.o.o.},
+    pdfsubject={Aviation Electronics and Cloud Services},
+    pdfkeywords={Kanardia, Aviation, Electronics, Cloud, Flight Management}
+}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[LO]{\rightmark}
+\fancyhead[RE]{\leftmark}
+\fancyfoot[C]{\textcolor{kanardiaGray}{KanardiaCloud User Manual}}
+
+% Chapter and section formatting
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries\color{kanardiaOrange}}
+{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+\titleformat{\section}
+{\normalfont\Large\bfseries\color{kanardiaOrange}}
+{\thesection}{1em}{}
+
+\titleformat{\subsection}
+{\normalfont\large\bfseries\color{kanardiaGray}}
+{\thesubsection}{1em}{}
+
+% Code listings setup
+\lstset{
+    backgroundcolor=\color{lightGray},
+    basicstyle=\footnotesize\ttfamily,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{kanardiaGray},
+    deletekeywords={...},
+    escapeinside={\%*}{*)},
+    extendedchars=true,
+    frame=single,
+    keepspaces=true,
+    keywordstyle=\color{kanardiaOrange},
+    language=Python,
+    morekeywords={*,...},
+    numbers=left,
+    numbersep=5pt,
+    numberstyle=\tiny\color{kanardiaGray},
+    rulecolor=\color{black},
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    stepnumber=1,
+    stringstyle=\color{kanardiaOrange},
+    tabsize=2,
+    title=\lstname
+}
+
+% Define JSON language for listings
+\lstdefinelanguage{json}{
+    basicstyle=\normalfont\ttfamily,
+    numbers=left,
+    numberstyle=\scriptsize,
+    stepnumber=1,
+    numbersep=8pt,
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{lightGray},
+    literate=
+     *{0}{{{\color{blue}0}}}{1}
+      {1}{{{\color{blue}1}}}{1}
+      {2}{{{\color{blue}2}}}{1}
+      {3}{{{\color{blue}3}}}{1}
+      {4}{{{\color{blue}4}}}{1}
+      {5}{{{\color{blue}5}}}{1}
+      {6}{{{\color{blue}6}}}{1}
+      {7}{{{\color{blue}7}}}{1}
+      {8}{{{\color{blue}8}}}{1}
+      {9}{{{\color{blue}9}}}{1}
+      {:}{{{\color{kanardiaOrange}{:}}}}{1}
+      {,}{{{\color{kanardiaOrange}{,}}}}{1}
+      {\{}{{{\color{kanardiaOrange}{\{}}}}{1}
+      {\}}{{{\color{kanardiaOrange}{\}}}}}{1}
+      {[}{{{\color{kanardiaOrange}{[}}}}{1}
+      {]}{{{\color{kanardiaOrange}{]}}}}{1},
+}
+
+% Title page information
+\title{
+    \vspace{2cm}
+    \includegraphics[width=0.3\textwidth]{images/kanardia_logo.png}\\[2cm]
+    {\Huge\bfseries KanardiaCloud}\\[0.5cm]
+    {\Large User Manual}\\[1cm]
+    {\large Version 1.0}
+}
+\author{Kanardia d.o.o.}
+\date{\today}
+
+\begin{document}
+
+% Title page
+\frontmatter
+\maketitle
+
+% Copyright page
+\newpage
+\thispagestyle{empty}
+\vspace*{\fill}
+\begin{center}
+\textbf{Copyright Notice}\\[0.5cm]
+\copyright\ 2025 Kanardia d.o.o. All rights reserved.\\[0.5cm]
+This document contains proprietary and confidential information of Kanardia d.o.o.\\
+No part of this document may be reproduced, distributed, or transmitted in any form\\
+or by any means without the prior written permission of Kanardia d.o.o.\\[1cm]
+
+\textbf{Contact Information}\\[0.5cm]
+Kanardia d.o.o.\\
+Dolenji Novaki pri Ajdovščini 14\\
+5270 Ajdovščina, Slovenia\\[0.5cm]
+Email: info@kanardia.com\\
+Web: www.kanardia.com\\[1cm]
+
+\textbf{Document Information}\\[0.5cm]
+Document Version: 1.0\\
+Last Updated: \today\\
+Document Type: User Manual
+\end{center}
+\vspace*{\fill}
+
+% Table of contents
+\tableofcontents
+\listoffigures
+\listoftables
+
+% Main content
+\mainmatter
+
+% Include chapters
+\input{chapters/introduction}
+\input{chapters/getting_started}
+\input{chapters/dashboard}
+\input{chapters/device_management}
+\input{chapters/checklist_management}
+\input{chapters/instrument_layouts}
+\input{chapters/logbook}
+\input{chapters/approach_charts}
+\input{chapters/user_settings}
+\input{chapters/troubleshooting}
+\input{chapters/api_reference}
+
+% Appendices
+\appendix
+\input{chapters/appendix_a}
+\input{chapters/appendix_b}
+
+% Bibliography (if needed)
+% \bibliography{references}
+% \bibliographystyle{plain}
+
+\end{document}
