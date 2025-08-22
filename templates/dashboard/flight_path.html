@@ -115,6 +115,24 @@
                     {% endif %}
                 </div>
             </div>
+
+            <!-- Flight Data Chart Card -->
+            {% if points_count > 0 %}
+            <div class="card mt-4">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h6 class="mb-0"><i class="fas fa-chart-bar"></i> Flight Data Chart</h6>
+                    <div>
+                        <label for="chart-parameter" class="form-label mb-0 me-2">Parameter:</label>
+                        <select id="chart-parameter" class="form-select form-select-sm d-inline-block w-auto">
+                            <option value="airspeed" selected>Airspeed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <canvas id="flight-data-chart" height="120"></canvas>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -128,13 +146,15 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let map = null;
     let flightPath = null;
     let pointMarkers = [];
     let showPoints = false;
-    
+    let flightChart = null;
+
     // Initialize the map
     function initMap() {
         // Create map centered on Europe initially
@@ -158,6 +178,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     displayFlightPath(data);
                     updateFlightStats(data);
+                    renderFlightChart(data, document.getElementById('chart-parameter').value);
+                    document.getElementById('chart-parameter').addEventListener('change', function() {
+                        updateChartParameter(data);
+                    });
                 } else {
                     console.error('Failed to load flight data:', data.message);
                     document.getElementById('flight-stats').innerHTML = 
@@ -319,6 +343,59 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Render flight data chart
+    function renderFlightChart(data, parameter) {
+        const ctx = document.getElementById('flight-data-chart').getContext('2d');
+        const points = data.points;
+        let chartLabel = '';
+        let chartData = [];
+        let chartUnit = '';
+        if (parameter === 'airspeed') {
+            chartLabel = 'Airspeed';
+            chartData = points.map(p => p.airspeed);
+            chartUnit = 'knots';
+        }
+        const labels = points.map(p => (p.timestamp_offset / 60).toFixed(1)); // minutes
+        if (flightChart) flightChart.destroy();
+        flightChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: chartLabel + ' (' + chartUnit + ')',
+                    data: chartData,
+                    borderColor: '#007bff',
+                    backgroundColor: 'rgba(0,123,255,0.1)',
+                    pointRadius: 0,
+                    tension: 0.2,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: true },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time (min)' }
+                    },
+                    y: {
+                        title: { display: true, text: chartLabel + ' (' + chartUnit + ')' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function updateChartParameter(data) {
+        const param = document.getElementById('chart-parameter').value;
+        renderFlightChart(data, param);
+    }
+
     // Event listeners
     document.getElementById('fit-map').addEventListener('click', fitToPath);
     document.getElementById('toggle-points').addEventListener('click', togglePoints);
