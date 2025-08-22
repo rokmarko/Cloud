@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if title %}{{ title }} - Cloud{% else %}Cloud{% endif %}</title>
+    <title>{% if title %}{{ title }} - Cloud        .sidebar-toggle .material-icons {
+            font-size: 16px;
+            transition: transform 0.3s ease;
+        }lse %}Cloud{% endif %}</title>
     
     <!-- Material Design Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/6.4.2/mdb.min.css" rel="stylesheet">
@@ -71,6 +74,15 @@
             box-shadow: var(--material-elevation-2);
             border-right: none;
             padding-top: 1rem;
+            transition: width 0.3s ease, min-width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .sidebar.collapsed {
+            width: 70px !important;
+            min-width: 70px !important;
+            max-width: 70px !important;
         }
         
         .sidebar .nav-link {
@@ -81,7 +93,35 @@
             font-weight: 400;
             display: flex;
             align-items: center;
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            position: relative;
+        }
+        
+        .sidebar.collapsed .nav-link {
+            padding: 12px;
+            margin: 2px;
+            justify-content: center;
+            width: 48px;
+        }
+        
+        .sidebar.collapsed .nav-link span:not(.material-icons) {
+            opacity: 0;
+            position: absolute;
+            left: 70px;
+            background: rgba(66, 66, 66, 0.9);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            white-space: nowrap;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .sidebar.collapsed .nav-link:hover span:not(.material-icons) {
+            opacity: 1;
         }
         
         .sidebar .nav-link:hover {
@@ -90,17 +130,129 @@
             transform: translateX(4px);
         }
         
+        .sidebar.collapsed .nav-link:hover {
+            transform: none;
+        }
+        
         .sidebar .nav-link.active {
             background: linear-gradient(135deg, var(--kanardia-orange), var(--kanardia-red));
             color: white;
             box-shadow: var(--material-elevation-2);
         }
         
-        .sidebar .nav-link i {
+        .sidebar .nav-link .material-icons {
             margin-right: 16px;
             font-size: 1.2rem;
             width: 24px;
             text-align: center;
+            min-width: 24px;
+        }
+        
+        .sidebar.collapsed .nav-link .material-icons {
+            margin-right: 0;
+        }
+        
+        .sidebar-heading {
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar.collapsed .sidebar-heading {
+            opacity: 0;
+            height: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden;
+        }
+        
+        .sidebar-toggle {
+            position: absolute;
+            top: 10px;
+            right: 8px;
+            background: var(--kanardia-orange);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--material-elevation-2);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+        
+        .sidebar-toggle:hover {
+            background: var(--kanardia-dark-orange);
+            box-shadow: var(--material-elevation-4);
+        }
+        
+        .sidebar-toggle .material-icons {
+            font-size: 14px;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar.collapsed .sidebar-toggle .material-icons {
+            transform: rotate(180deg);
+        }
+        
+        /* Content area adjustment */
+        .content-wrapper {
+            transition: margin-left 0.3s ease;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 767.98px) {
+            .sidebar {
+                position: fixed;
+                top: 76px;
+                left: -100%;
+                width: 280px !important;
+                height: calc(100vh - 76px);
+                z-index: 1040;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.show {
+                left: 0;
+            }
+            
+            .sidebar.collapsed {
+                width: 280px !important;
+                left: -100%;
+            }
+            
+            .sidebar-toggle {
+                display: none;
+            }
+            
+            .content-wrapper {
+                margin-left: 0 !important;
+                width: 100% !important;
+            }
+            
+            /* Mobile sidebar backdrop */
+            .sidebar-backdrop {
+                position: fixed;
+                top: 76px;
+                left: 0;
+                width: 100vw;
+                height: calc(100vh - 76px);
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 1039;
+                display: none;
+            }
+            
+            .sidebar-backdrop.show {
+                display: block;
+            }
+        }
+        
+        @media (min-width: 768px) {
+            .sidebar-backdrop {
+                display: none !important;
+            }
         }
         
         /* Material Cards */
@@ -123,6 +275,22 @@
             border-radius: 12px 12px 0 0 !important;
             padding: 1rem 1.5rem;
             font-weight: 500;
+        }
+        
+        /* Mobile card adjustments */
+        @media (max-width: 767.98px) {
+            .card {
+                margin-left: 0.5rem;
+                margin-right: 0.5rem;
+            }
+            
+            .card-header {
+                padding: 0.75rem 1rem;
+            }
+            
+            .card-body {
+                padding: 1rem;
+            }
         }
         
         /* Material Buttons */
@@ -210,9 +378,16 @@
         
         /* Content Wrapper */
         .content-wrapper {
-            padding: 2rem;
+            padding: 1rem;
             background-color: #fafafa;
             min-height: calc(100vh - 76px);
+        }
+        
+        /* Mobile content wrapper adjustments */
+        @media (max-width: 767.98px) {
+            .content-wrapper {
+                padding: 0.5rem 0.5rem;
+            }
         }
         
         /* Material Headers */
@@ -380,8 +555,15 @@
                 <span class="brand-handwritten">Cloud</span>
             </a>
             
+            <!-- Mobile sidebar toggle (only show when authenticated) -->
+            {% if current_user.is_authenticated %}
+            <button class="btn d-md-none me-2" type="button" onclick="toggleMobileSidebar()" style="color: white; border: 1px solid rgba(255,255,255,0.3);">
+                <span class="material-icons">menu</span>
+            </button>
+            {% endif %}
+            
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border: 1px solid rgba(255,255,255,0.3);">
-                <span class="material-icons" style="color: white;">menu</span>
+                <span class="material-icons" style="color: white;">more_vert</span>
             </button>
             
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -445,45 +627,57 @@
     <!-- Main Content -->
     <div class="container-fluid">
         <div class="row">
+            <!-- Mobile sidebar backdrop -->
+            <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+            
             {% if current_user.is_authenticated %}
                 <!-- Sidebar -->
-                <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
-                    <div class="position-sticky pt-3">
+                <nav class="col-md-3 col-lg-2 d-md-block sidebar" id="sidebar">
+                    <button class="sidebar-toggle" onclick="toggleSidebar()">
+                        <span class="material-icons">chevron_left</span>
+                    </button>
+                    <div class="position-sticky pt-5">
                         <ul class="nav flex-column">
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}" 
                                    href="{{ url_for('dashboard.index') }}">
-                                    <span class="material-icons">dashboard</span> Dashboard
+                                    <span class="material-icons">dashboard</span> 
+                                    <span>Dashboard</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.checklists') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.checklists') }}">
-                                    <span class="material-icons">checklist</span> Checklists
+                                    <span class="material-icons">checklist</span> 
+                                    <span>Checklists</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.instrument_layouts') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.instrument_layouts') }}">
-                                    <span class="material-icons">dashboard</span> Instrument Layouts
+                                    <span class="material-icons">dashboard</span> 
+                                    <span>Instrument Layouts</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.approach_charts') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.approach_charts') }}">
-                                    <span class="material-icons">map</span> Approach Charts
+                                    <span class="material-icons">map</span> 
+                                    <span>Approach Charts</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.logbook') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.logbook') }}">
-                                    <span class="material-icons">book</span> Logbook
+                                    <span class="material-icons">book</span> 
+                                    <span>Logbook</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'dashboard.my_aircraft_access' %}active{% endif %}" 
                                    href="{{ url_for('dashboard.my_aircraft_access') }}">
-                                    <span class="material-icons">flight</span> My Aircraft
+                                    <span class="material-icons">flight</span> 
+                                    <span>My Aircraft</span>
                                 </a>
                             </li>
                             <li class="nav-item mt-3">
@@ -494,13 +688,15 @@
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard.devices') %}active{% endif %}" 
                                    href="{{ url_for('dashboard.devices') }}">
-                                    <span class="material-icons">devices</span> My Devices
+                                    <span class="material-icons">devices</span> 
+                                    <span>My Devices</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'dashboard.events' %}active{% endif %}" 
                                    href="{{ url_for('dashboard.events') }}">
-                                    <span class="material-icons">flash_on</span> Device Events
+                                    <span class="material-icons">flash_on</span> 
+                                    <span>Device Events</span>
                                 </a>
                             </li>
                             {% if current_user.is_admin %}
@@ -512,37 +708,43 @@
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" 
                                    href="{{ url_for('admin.index') }}">
-                                    <span class="material-icons">admin_panel_settings</span> Admin Panel
+                                    <span class="material-icons">admin_panel_settings</span> 
+                                    <span>Admin Panel</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'admin.users' %}active{% endif %}" 
                                    href="{{ url_for('admin.users') }}">
-                                    <span class="material-icons">people</span> Manage Users
+                                    <span class="material-icons">people</span> 
+                                    <span>Manage Users</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'admin.devices' %}active{% endif %}" 
                                    href="{{ url_for('admin.devices') }}">
-                                    <span class="material-icons">devices</span> All Devices
+                                    <span class="material-icons">devices</span> 
+                                    <span>All Devices</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'admin.logbook' %}active{% endif %}" 
                                    href="{{ url_for('admin.logbook') }}">
-                                    <span class="material-icons">flight_takeoff</span> Logbook
+                                    <span class="material-icons">flight_takeoff</span> 
+                                    <span>Logbook</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'admin.pilots' %}active{% endif %}" 
                                    href="{{ url_for('admin.pilots') }}">
-                                    <span class="material-icons">person</span> Pilot Mappings
+                                    <span class="material-icons">person</span> 
+                                    <span>Pilot Mappings</span>
                                 </a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint in ['admin.sync_management', 'admin.sync_devices'] %}active{% endif %}" 
                                    href="{{ url_for('admin.sync_management') }}">
-                                    <span class="material-icons">sync</span> ThingsBoard Sync
+                                    <span class="material-icons">sync</span> 
+                                    <span>ThingsBoard Sync</span>
                                 </a>
                             </li>
                             {% endif %}
@@ -602,6 +804,82 @@
                     }
                 });
             });
+            
+            // Initialize sidebar state from localStorage
+            const sidebar = document.getElementById('sidebar');
+            const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            
+            if (isCollapsed && sidebar) {
+                sidebar.classList.add('collapsed');
+                updateContentMargin(true);
+            }
+        });
+        
+        // Sidebar toggle functionality
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                sidebar.classList.remove('collapsed');
+                localStorage.setItem('sidebarCollapsed', 'false');
+                updateContentMargin(false);
+            } else {
+                sidebar.classList.add('collapsed');
+                localStorage.setItem('sidebarCollapsed', 'true');
+                updateContentMargin(true);
+            }
+        }
+        
+        // Mobile sidebar toggle functionality
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            
+            if (sidebar.classList.contains('show')) {
+                closeMobileSidebar();
+            } else {
+                sidebar.classList.add('show');
+                backdrop.classList.add('show');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+        
+        function closeMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            
+            sidebar.classList.remove('show');
+            backdrop.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        
+        // Update main content margin when sidebar is toggled
+        function updateContentMargin(isCollapsed) {
+            const contentWrapper = document.querySelector('.content-wrapper');
+            if (contentWrapper) {
+                if (window.innerWidth >= 768) { // md breakpoint
+                    if (isCollapsed) {
+                        contentWrapper.style.marginLeft = '80px';
+                        contentWrapper.classList.remove('col-md-9', 'col-lg-10');
+                        contentWrapper.classList.add('col-md-11', 'col-lg-11');
+                    } else {
+                        contentWrapper.style.marginLeft = '';
+                        contentWrapper.classList.remove('col-md-11', 'col-lg-11');
+                        contentWrapper.classList.add('col-md-9', 'col-lg-10');
+                    }
+                }
+            }
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar && window.innerWidth < 768) {
+                // Reset on mobile
+                sidebar.classList.remove('collapsed');
+                updateContentMargin(false);
+            }
         });
     </script>
     
