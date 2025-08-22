@@ -4,10 +4,10 @@
 set -e
 
 # Change to project directory
-cd /home/rok/src/Cloud-1
+cd /home/rok/Cloud
 
 # Activate virtual environment
-source .venv/bin/activate
+source venv/bin/activate
 
 # Export production environment
 export FLASK_ENV=production

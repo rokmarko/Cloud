@@ -26,7 +26,7 @@ class ThingsBoardSyncService:
         self.base_url = os.getenv('THINGSBOARD_URL', 'https://aetos.kanardia.eu:8088')
         self.username = os.getenv('THINGSBOARD_USERNAME', 'tenant@thingsboard.local')
         self.password = os.getenv('THINGSBOARD_PASSWORD', 'tenant')
-        self.timeout = 30  # seconds
+        self.timeout = 15000  # seconds
         self.event_batch_size = event_batch_size  # Configurable batch size for event processing
         self._jwt_token = None
         self._token_expires_at = None
@@ -459,7 +459,7 @@ class ThingsBoardSyncService:
                 "events": events_data
             },
             "persistent": False,
-            "timeout": 5000
+            "timeout": self.timeout
         }
 
         logger.debug(f"Payload for ThingsBoard getFlight: {json.dumps(payload, indent=2)}")
