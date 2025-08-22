@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons">edit</span> Edit Airfield: {{ airfield.icao_code }}</h1>
+    <div>
+        <a href="{{ url_for('admin.airfield_detail', airfield_id=airfield.id) }}" class="btn btn-outline-secondary">
+            <span class="material-icons me-2">arrow_back</span> Back to Details
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Edit Airfield Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="icao_code" class="form-label">ICAO Code *</label>
+                            <input type="text" class="form-control" id="icao_code" name="icao_code" 
+                                   value="{{ airfield.icao_code }}" readonly>
+                            <div class="form-text">ICAO code cannot be changed</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="name" class="form-label">Airport Name *</label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   value="{{ airfield.name }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="latitude" class="form-label">Latitude *</label>
+                            <input type="number" class="form-control" id="latitude" name="latitude" 
+                                   value="{{ airfield.latitude }}" step="any" min="-90" max="90" required>
+                            <div class="form-text">Decimal degrees (-90 to 90)</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="longitude" class="form-label">Longitude *</label>
+                            <input type="number" class="form-control" id="longitude" name="longitude" 
+                                   value="{{ airfield.longitude }}" step="any" min="-180" max="180" required>
+                            <div class="form-text">Decimal degrees (-180 to 180)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="country" class="form-label">Country</label>
+                            <input type="text" class="form-control" id="country" name="country" 
+                                   value="{{ airfield.country or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="region" class="form-label">Region</label>
+                            <input type="text" class="form-control" id="region" name="region" 
+                                   value="{{ airfield.region or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="elevation_ft" class="form-label">Elevation (ft)</label>
+                            <input type="number" class="form-control" id="elevation_ft" name="elevation_ft" 
+                                   value="{{ airfield.elevation_ft or '' }}">
+                            <div class="form-text">Elevation in feet above sea level</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="source" class="form-label">Source</label>
+                            <input type="text" class="form-control" id="source" name="source" 
+                                   value="{{ airfield.source or '' }}" placeholder="e.g., Manual Entry, API Import">
+                            <div class="form-text">Who or what loaded this airfield data</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="runway_info" class="form-label">Runway Information</label>
+                        <textarea class="form-control" id="runway_info" name="runway_info" rows="3">{{ airfield.runway_info or '' }}</textarea>
+                        <div class="form-text">JSON format runway data (optional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="frequencies" class="form-label">Radio Frequencies</label>
+                        <textarea class="form-control" id="frequencies" name="frequencies" rows="3">{{ airfield.frequencies or '' }}</textarea>
+                        <div class="form-text">JSON format frequency data (optional)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                   {% if airfield.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">
+                                Active airfield
+                            </label>
+                            <div class="form-text">Inactive airfields are excluded from geocoding searches</div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <button type="submit" class="btn btn-primary">
+                                <span class="material-icons me-2">save</span> Save Changes
+                            </button>
+                            <a href="{{ url_for('admin.airfield_detail', airfield_id=airfield.id) }}" class="btn btn-secondary ms-2">
+                                Cancel
+                            </a>
+                        </div>
+                        <div>
+                            <form method="POST" action="{{ url_for('admin.delete_airfield', airfield_id=airfield.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete {{ airfield.icao_code }} - {{ airfield.name }}?\n\nThis action cannot be undone.')">
+                                    <span class="material-icons me-2">delete</span> Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Current Location</h5>
+            </div>
+            <div class="card-body">
+                <div id="preview-map" style="height: 250px; background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; border: 1px solid #dee2e6; border-radius: 0.375rem;">
+                    <div class="text-center">
+                        <span class="material-icons" style="font-size: 3rem; color: #6c757d;">location_on</span>
+                        <p class="text-muted mt-2" id="coords-display">{{ "%.4f"|format(airfield.latitude) }}, {{ "%.4f"|format(airfield.longitude) }}</p>
+                        <small class="text-muted">Location preview</small>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>Quick Links:</h6>
+                    <div class="d-grid gap-2">
+                        <a href="https://www.google.com/maps?q={{ airfield.latitude }},{{ airfield.longitude }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                            <span class="material-icons me-1">map</span> Google Maps
+                        </a>
+                        <a href="https://skyvector.com/?ll={{ airfield.latitude }},{{ airfield.longitude }}&chart=301&zoom=4" target="_blank" class="btn btn-outline-primary btn-sm">
+                            <span class="material-icons me-1">flight</span> SkyVector
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Help</h5>
+            </div>
+            <div class="card-body">
+                <h6>Coordinate Format:</h6>
+                <p class="small">Use decimal degrees format:</p>
+                <ul class="small">
+                    <li>Latitude: -90 to 90</li>
+                    <li>Longitude: -180 to 180</li>
+                    <li>Positive = North/East</li>
+                    <li>Negative = South/West</li>
+                </ul>
+                
+                <h6 class="mt-3">Data Sources:</h6>
+                <p class="small">Common source values:</p>
+                <ul class="small">
+                    <li>Manual Entry</li>
+                    <li>API Import</li>
+                    <li>Migration Script</li>
+                    <li>External Database</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Update coordinate display when values change
+document.getElementById('latitude').addEventListener('input', updateCoordinatesDisplay);
+document.getElementById('longitude').addEventListener('input', updateCoordinatesDisplay);
+
+function updateCoordinatesDisplay() {
+    const lat = document.getElementById('latitude').value;
+    const lon = document.getElementById('longitude').value;
+    
+    if (lat && lon) {
+        const display = `${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
+        document.getElementById('coords-display').textContent = display;
+    }
+}
+</script>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.form-label {
+    font-weight: 600;
+}
+
+.card-header h5 {
+    color: #333;
+}
+</style>
+
+{% endblock %}

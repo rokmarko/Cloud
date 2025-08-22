@@ -373,6 +373,7 @@ def add_or_update_airfield():
             existing_airfield.country = data.get('country')
             existing_airfield.region = data.get('region')
             existing_airfield.elevation_ft = data.get('elevation_ft')
+            existing_airfield.source = data.get('source')
             existing_airfield.runway_info = data.get('runway_info')
             existing_airfield.frequencies = data.get('frequencies')
             existing_airfield.is_active = data.get('is_active', True)
@@ -395,6 +396,7 @@ def add_or_update_airfield():
                 country=data.get('country'),
                 region=data.get('region'),
                 elevation_ft=data.get('elevation_ft'),
+                source=data.get('source'),
                 runway_info=data.get('runway_info'),
                 frequencies=data.get('frequencies'),
                 is_active=data.get('is_active', True)
@@ -492,6 +494,7 @@ def bulk_add_airfields():
                     existing_airfield.country = airfield_data.get('country')
                     existing_airfield.region = airfield_data.get('region')
                     existing_airfield.elevation_ft = airfield_data.get('elevation_ft')
+                    existing_airfield.source = airfield_data.get('source')
                     existing_airfield.runway_info = airfield_data.get('runway_info')
                     existing_airfield.frequencies = airfield_data.get('frequencies')
                     existing_airfield.is_active = airfield_data.get('is_active', True)
@@ -507,6 +510,7 @@ def bulk_add_airfields():
                         country=airfield_data.get('country'),
                         region=airfield_data.get('region'),
                         elevation_ft=airfield_data.get('elevation_ft'),
+                        source=airfield_data.get('source'),
                         runway_info=airfield_data.get('runway_info'),
                         frequencies=airfield_data.get('frequencies'),
                         is_active=airfield_data.get('is_active', True)

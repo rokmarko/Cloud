@@ -617,6 +617,7 @@ class Airfield(db.Model):
     country = db.Column(db.String(50))
     region = db.Column(db.String(50))
     elevation_ft = db.Column(db.Integer)  # Elevation in feet
+    source = db.Column(db.String(100), nullable=True)  # Source of airfield data (who loaded it)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -639,6 +640,7 @@ class Airfield(db.Model):
             'country': self.country,
             'region': self.region,
             'elevation_ft': self.elevation_ft,
+            'source': self.source,
             'is_active': self.is_active,
             'runway_info': self.runway_info,
             'frequencies': self.frequencies

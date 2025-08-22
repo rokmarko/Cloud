@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from datetime import datetime, timedelta
 from src.app import db
-from src.models import User, Device, Checklist, LogbookEntry, Pilot, Event, FlightPoint
+from src.models import User, Device, Checklist, LogbookEntry, Pilot, Event, FlightPoint, Airfield
 from src.forms import PilotMappingForm
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
@@ -39,6 +39,7 @@ def index():
     total_devices = Device.query.filter_by(is_active=True).count()
     total_checklists = Checklist.query.filter_by(is_active=True).count()
     total_logbook_entries = LogbookEntry.query.count()
+    total_airfields = Airfield.query.filter_by(is_active=True).count()
     
     recent_users = User.query.filter_by(is_active=True).order_by(User.created_at.desc()).limit(5).all()
     recent_devices = Device.query.filter_by(is_active=True).order_by(Device.created_at.desc()).limit(10).all()
@@ -49,6 +50,7 @@ def index():
                          total_devices=total_devices,
                          total_checklists=total_checklists,
                          total_logbook_entries=total_logbook_entries,
+                         total_airfields=total_airfields,
                          recent_users=recent_users,
                          recent_devices=recent_devices)
 
@@ -995,3 +997,227 @@ def test_device_claimed_email():
         current_app.logger.error(f"Error in admin test device claimed email: {str(e)}")
     
     return redirect(url_for('admin.test_email'))
+
+
+# Airfield Management Routes
+
+@admin_bp.route('/airfields')
+@login_required
+@admin_required
+def airfields():
+    """Admin view of all airfields."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 25
+    search = request.args.get('search', '', type=str)
+    country_filter = request.args.get('country', '', type=str)
+    source_filter = request.args.get('source', '', type=str)
+    
+    # Build query
+    query = Airfield.query
+    
+    # Apply search filter
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Airfield.icao_code.ilike(search_term)) |
+            (Airfield.name.ilike(search_term)) |
+            (Airfield.country.ilike(search_term))
+        )
+    
+    # Apply country filter
+    if country_filter:
+        query = query.filter(Airfield.country.ilike(f"%{country_filter}%"))
+    
+    # Apply source filter
+    if source_filter:
+        query = query.filter(Airfield.source.ilike(f"%{source_filter}%"))
+    
+    # Order by ICAO code
+    query = query.order_by(Airfield.icao_code.asc())
+    
+    # Paginate
+    airfields = query.paginate(
+        page=page, 
+        per_page=per_page, 
+        error_out=False
+    )
+    
+    # Get filter options for dropdowns
+    countries = db.session.query(Airfield.country.distinct().label('country'))\
+        .filter(Airfield.country.isnot(None))\
+        .order_by('country').all()
+    
+    sources = db.session.query(Airfield.source.distinct().label('source'))\
+        .filter(Airfield.source.isnot(None))\
+        .order_by('source').all()
+    
+    return render_template('admin/airfields.html',
+                         title='Airfield Management',
+                         airfields=airfields,
+                         search=search,
+                         country_filter=country_filter,
+                         source_filter=source_filter,
+                         countries=[c.country for c in countries],
+                         sources=[s.source for s in sources])
+
+
+@admin_bp.route('/airfields/<int:airfield_id>')
+@login_required
+@admin_required
+def airfield_detail(airfield_id):
+    """View/edit specific airfield."""
+    airfield = Airfield.query.get_or_404(airfield_id)
+    return render_template('admin/airfield_detail.html',
+                         title=f'Airfield: {airfield.icao_code}',
+                         airfield=airfield)
+
+
+@admin_bp.route('/airfields/<int:airfield_id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def edit_airfield(airfield_id):
+    """Edit airfield data."""
+    airfield = Airfield.query.get_or_404(airfield_id)
+    
+    if request.method == 'POST':
+        try:
+            # Update airfield data
+            airfield.name = request.form.get('name', '').strip()
+            airfield.latitude = float(request.form.get('latitude', 0))
+            airfield.longitude = float(request.form.get('longitude', 0))
+            airfield.country = request.form.get('country', '').strip() or None
+            airfield.region = request.form.get('region', '').strip() or None
+            airfield.source = request.form.get('source', '').strip() or None
+            
+            elevation_str = request.form.get('elevation_ft', '').strip()
+            airfield.elevation_ft = int(elevation_str) if elevation_str else None
+            
+            airfield.runway_info = request.form.get('runway_info', '').strip() or None
+            airfield.frequencies = request.form.get('frequencies', '').strip() or None
+            airfield.is_active = 'is_active' in request.form
+            
+            db.session.commit()
+            flash(f'Airfield {airfield.icao_code} updated successfully!', 'success')
+            return redirect(url_for('admin.airfield_detail', airfield_id=airfield.id))
+            
+        except ValueError as e:
+            flash(f'Invalid data: {str(e)}', 'error')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating airfield: {str(e)}', 'error')
+    
+    return render_template('admin/edit_airfield.html',
+                         title=f'Edit Airfield: {airfield.icao_code}',
+                         airfield=airfield)
+
+
+@admin_bp.route('/airfields/<int:airfield_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_airfield(airfield_id):
+    """Delete specific airfield."""
+    airfield = Airfield.query.get_or_404(airfield_id)
+    
+    try:
+        icao_code = airfield.icao_code
+        name = airfield.name
+        
+        db.session.delete(airfield)
+        db.session.commit()
+        
+        flash(f'Airfield {icao_code} - {name} deleted successfully!', 'success')
+        logger.info(f"Admin {current_user.email} deleted airfield {icao_code}")
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting airfield: {str(e)}', 'error')
+        logger.error(f"Error deleting airfield {airfield.icao_code}: {str(e)}")
+    
+    return redirect(url_for('admin.airfields'))
+
+
+@admin_bp.route('/airfields/delete-all', methods=['POST'])
+@login_required
+@admin_required
+def delete_all_airfields():
+    """Delete all airfields."""
+    try:
+        # Count existing airfields
+        count = Airfield.query.count()
+        
+        # Delete all airfields
+        Airfield.query.delete()
+        db.session.commit()
+        
+        flash(f'Successfully deleted all {count} airfields!', 'success')
+        logger.info(f"Admin {current_user.email} deleted all {count} airfields")
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting all airfields: {str(e)}', 'error')
+        logger.error(f"Error deleting all airfields: {str(e)}")
+    
+    return redirect(url_for('admin.airfields'))
+
+
+@admin_bp.route('/airfields/new', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def new_airfield():
+    """Create new airfield."""
+    if request.method == 'POST':
+        try:
+            # Validate required fields
+            icao_code = request.form.get('icao_code', '').strip().upper()
+            name = request.form.get('name', '').strip()
+            latitude = float(request.form.get('latitude', 0))
+            longitude = float(request.form.get('longitude', 0))
+            
+            if not icao_code or len(icao_code) != 4 or not icao_code.isalpha():
+                flash('ICAO code must be exactly 4 letters', 'error')
+                return render_template('admin/new_airfield.html', title='New Airfield')
+            
+            if not name:
+                flash('Airport name is required', 'error')
+                return render_template('admin/new_airfield.html', title='New Airfield')
+            
+            # Check if ICAO code already exists
+            existing = Airfield.query.filter_by(icao_code=icao_code).first()
+            if existing:
+                flash(f'Airfield with ICAO code {icao_code} already exists', 'error')
+                return render_template('admin/new_airfield.html', title='New Airfield')
+            
+            # Create new airfield
+            airfield = Airfield(
+                icao_code=icao_code,
+                name=name,
+                latitude=latitude,
+                longitude=longitude,
+                country=request.form.get('country', '').strip() or None,
+                region=request.form.get('region', '').strip() or None,
+                source=request.form.get('source', '').strip() or None
+            )
+            
+            elevation_str = request.form.get('elevation_ft', '').strip()
+            if elevation_str:
+                airfield.elevation_ft = int(elevation_str)
+            
+            airfield.runway_info = request.form.get('runway_info', '').strip() or None
+            airfield.frequencies = request.form.get('frequencies', '').strip() or None
+            airfield.is_active = 'is_active' in request.form
+            
+            db.session.add(airfield)
+            db.session.commit()
+            
+            flash(f'Airfield {icao_code} created successfully!', 'success')
+            logger.info(f"Admin {current_user.email} created airfield {icao_code}")
+            return redirect(url_for('admin.airfield_detail', airfield_id=airfield.id))
+            
+        except ValueError as e:
+            flash(f'Invalid data: {str(e)}', 'error')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error creating airfield: {str(e)}', 'error')
+            logger.error(f"Error creating airfield: {str(e)}")
+    
+    return render_template('admin/new_airfield.html', title='New Airfield')

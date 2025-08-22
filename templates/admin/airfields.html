@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1><span class="material-icons">flight_takeoff</span> Airfield Management</h1>
+    <div>
+        <a href="{{ url_for('admin.new_airfield') }}" class="btn btn-primary me-2">
+            <span class="material-icons me-2">add</span> New Airfield
+        </a>
+        <a href="{{ url_for('admin.index') }}" class="btn btn-outline-secondary">
+            <span class="material-icons me-2">arrow_back</span> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Search and Filter Form -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label for="search" class="form-label">Search</label>
+                <input type="text" class="form-control" id="search" name="search" 
+                       value="{{ search }}" placeholder="ICAO code, name, or country">
+            </div>
+            <div class="col-md-3">
+                <label for="country" class="form-label">Country</label>
+                <select class="form-select" id="country" name="country">
+                    <option value="">All Countries</option>
+                    {% for country in countries %}
+                    <option value="{{ country }}" {% if country == country_filter %}selected{% endif %}>
+                        {{ country }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="source" class="form-label">Source</label>
+                <select class="form-select" id="source" name="source">
+                    <option value="">All Sources</option>
+                    {% for source in sources %}
+                    <option value="{{ source }}" {% if source == source_filter %}selected{% endif %}>
+                        {{ source }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <span class="material-icons">search</span>
+                </button>
+                <a href="{{ url_for('admin.airfields') }}" class="btn btn-outline-secondary">
+                    <span class="material-icons">clear</span>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if airfields.items %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Airfields ({{ airfields.total }} total)</h5>
+            <button type="button" class="btn btn-danger btn-sm" onclick="deleteAllAirfields()">
+                <span class="material-icons me-1">delete_sweep</span> Delete All
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ICAO</th>
+                            <th>Name</th>
+                            <th>Location</th>
+                            <th>Country</th>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for airfield in airfields.items %}
+                        <tr id="airfield-row-{{ airfield.id }}">
+                            <td>
+                                <span class="badge bg-primary">{{ airfield.icao_code }}</span>
+                            </td>
+                            <td>
+                                <strong>{{ airfield.name }}</strong>
+                                {% if airfield.elevation_ft %}
+                                <br><small class="text-muted">{{ airfield.elevation_ft }} ft</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <code class="text-muted">
+                                    {{ "%.4f"|format(airfield.latitude) }}, {{ "%.4f"|format(airfield.longitude) }}
+                                </code>
+                                {% if airfield.region %}
+                                <br><small class="text-muted">{{ airfield.region }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if airfield.country %}
+                                    <span class="badge bg-info">{{ airfield.country }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if airfield.source %}
+                                    <span class="badge bg-secondary">{{ airfield.source }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if airfield.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        <span class="material-icons">more_vert</span>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.airfield_detail', airfield_id=airfield.id) }}">
+                                                <span class="material-icons me-2">visibility</span> View Details
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.edit_airfield', airfield_id=airfield.id) }}">
+                                                <span class="material-icons me-2">edit</span> Edit
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <form method="POST" action="{{ url_for('admin.delete_airfield', airfield_id=airfield.id) }}" class="m-0">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to delete {{ airfield.icao_code }} - {{ airfield.name }}?')">
+                                                    <span class="material-icons me-2">delete</span> Delete
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if airfields.pages > 1 %}
+    <nav aria-label="Airfields pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if airfields.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin.airfields', page=airfields.prev_num, search=search, country=country_filter, source=source_filter) }}">
+                        <span class="material-icons">chevron_left</span>
+                    </a>
+                </li>
+            {% endif %}
+            
+            {% for page_num in airfields.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != airfields.page %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('admin.airfields', page=page_num, search=search, country=country_filter, source=source_filter) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                    {% endif %}
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if airfields.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('admin.airfields', page=airfields.next_num, search=search, country=country_filter, source=source_filter) }}">
+                        <span class="material-icons">chevron_right</span>
+                    </a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+{% else %}
+    <div class="text-center mt-5">
+        <span class="material-icons mb-4" style="font-size: 6rem; color: #e0e0e0;">flight_takeoff</span>
+        <h3 class="text-muted mb-3">No airfields found</h3>
+        {% if search or country_filter or source_filter %}
+        <p class="text-muted mb-4">No airfields match your search criteria.</p>
+        <a href="{{ url_for('admin.airfields') }}" class="btn btn-outline-primary">
+            <span class="material-icons me-2">clear</span> Clear Filters
+        </a>
+        {% else %}
+        <p class="text-muted mb-4">No airfields have been added yet.</p>
+        <a href="{{ url_for('admin.new_airfield') }}" class="btn btn-primary">
+            <span class="material-icons me-2">add</span> Add First Airfield
+        </a>
+        {% endif %}
+    </div>
+{% endif %}
+
+<script>
+/**
+ * Delete all airfields with confirmation
+ */
+function deleteAllAirfields() {
+    if (confirm('⚠️ DELETE ALL AIRFIELDS ⚠️\n\nAre you sure you want to DELETE ALL AIRFIELDS?\n\nThis action will:\n• Delete ALL airfield data from the database\n• Cannot be undone\n• May affect geocoding functionality\n\nContinue with deletion?')) {
+        const confirmation = prompt('Type "DELETE ALL AIRFIELDS" to confirm this destructive action:');
+        if (confirmation === 'DELETE ALL AIRFIELDS') {
+            // Create a form and submit it
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '{{ url_for("admin.delete_all_airfields") }}';
+            
+            // Add CSRF token
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = '{{ csrf_token() }}';
+            form.appendChild(csrfInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        } else if (confirmation !== null) {
+            alert('Deletion cancelled. You must type "DELETE ALL AIRFIELDS" exactly to confirm.');
+        }
+    }
+}
+</script>
+
+<style>
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: #333;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+.table td {
+    vertical-align: middle;
+}
+</style>
+
+{% endblock %}

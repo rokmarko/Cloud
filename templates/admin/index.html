@@ -51,6 +51,29 @@
     </div>
 </div>
 
+<!-- Second row of statistics -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-3 col-md-6">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <span class="material-icons mb-2" style="font-size: 2.5rem; color: #9C27B0;">flight_takeoff</span>
+                <h3 class="stats-number">{{ total_airfields }}</h3>
+                <p class="stats-label">Airfields</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Placeholder for future statistics -->
+    <div class="col-lg-9 col-md-6">
+        <div class="card stats-card" style="opacity: 0.3;">
+            <div class="card-body text-center">
+                <span class="material-icons mb-2" style="font-size: 2.5rem; color: #607D8B;">analytics</span>
+                <h6 class="text-muted">More statistics coming soon...</h6>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Quick Actions -->
 <div class="row g-4 mb-4">
     <div class="col-12">
@@ -66,11 +89,14 @@
                     <a href="{{ url_for('admin.devices') }}" class="btn btn-outline-primary">
                         <span class="material-icons me-2">devices</span> View All Devices
                     </a>
+                    <a href="{{ url_for('admin.airfields') }}" class="btn btn-outline-primary">
+                        <span class="material-icons me-2">flight_takeoff</span> Airfield Management
+                    </a>
                     <a href="{{ url_for('admin.pilots') }}" class="btn btn-outline-secondary">
                         <span class="material-icons me-2">person</span> Pilot Mappings
                     </a>
                     <a href="{{ url_for('admin.logbook') }}" class="btn btn-outline-info">
-                        <span class="material-icons me-2">flight_takeoff</span> Logbook
+                        <span class="material-icons me-2">book</span> Logbook
                     </a>
                     <a href="{{ url_for('admin.events') }}" class="btn btn-outline-success">
                         <span class="material-icons me-2">event</span> Device Events

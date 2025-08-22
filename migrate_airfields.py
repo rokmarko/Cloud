@@ -74,6 +74,7 @@ def migrate_airfields():
                     longitude=data['lon'],
                     country=data.get('country'),
                     region=data.get('region'),
+                    source='Migration Script',
                     is_active=True
                 )
                 db.session.add(airfield)
