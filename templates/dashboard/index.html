@@ -53,10 +53,22 @@
             <div class="stats-card clickable-card">
                 <span class="material-icons mb-3" style="font-size: 3rem; color: #9C27B0;">flight</span>
                 <h2 class="stats-number">{{ pilot_mapping_count }}</h2>
-                <p class="stats-label">My Aircraft</p>
+                <p class="stats-label">Aircrafts</p>
             </div>
         </a>
     </div>
+    
+    <div class="col-xl-3 col-md-6">
+        <a href="{{ url_for('dashboard.airfields') }}" class="text-decoration-none">
+            <div class="stats-card clickable-card">
+                <span class="material-icons mb-3" style="font-size: 3rem; color: #795548;">map</span>
+                <h2 class="stats-number">{{ airfield_count or 0 }}</h2>
+                <p class="stats-label">Airfields Map</p>
+            </div>
+        </a>
+    </div> 
+    
+    <div class="col-xl-3 col-md-6">
         <a href="{{ url_for('dashboard.logbook') }}" class="text-decoration-none">
             <div class="stats-card clickable-card">
                 <span class="material-icons mb-3" style="font-size: 3rem; color: #FF9800;">book</span>

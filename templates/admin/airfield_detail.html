@@ -158,12 +158,9 @@
                 <h5 class="mb-0">Map Location</h5>
             </div>
             <div class="card-body">
-                <div id="map" style="height: 300px; background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; border: 1px solid #dee2e6; border-radius: 0.375rem;">
-                    <div class="text-center">
-                        <span class="material-icons" style="font-size: 3rem; color: #6c757d;">location_on</span>
-                        <p class="text-muted mt-2">{{ "%.4f"|format(airfield.latitude) }}, {{ "%.4f"|format(airfield.longitude) }}</p>
-                        <small class="text-muted">Map integration coming soon</small>
-                    </div>
+                <div id="airfield-map" style="height: 300px; width: 100%; border: 1px solid #dee2e6; border-radius: 0.375rem;"></div>
+                <div class="mt-2 text-center">
+                    <small class="text-muted">{{ "%.6f"|format(airfield.latitude) }}, {{ "%.6f"|format(airfield.longitude) }}</small>
                 </div>
             </div>
         </div>
@@ -228,6 +225,71 @@ pre code {
     background: none !important;
     padding: 0 !important;
 }
+
+/* Map specific styles */
+#airfield-map {
+    width: 100%;
+    height: 300px;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
 </style>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+
+<!-- Leaflet JavaScript -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Airfield coordinates from the template
+    var airfieldLat = {{ airfield.latitude }};
+    var airfieldLng = {{ airfield.longitude }};
+    var airfieldName = "{{ airfield.name|e }}";
+    var airfieldIcao = "{{ airfield.icao_code|e }}";
+    
+    // Initialize the map
+    var map = L.map('airfield-map').setView([airfieldLat, airfieldLng], 13);
+    
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    
+    // Create custom icon for the airfield
+    var airfieldIcon = L.divIcon({
+        className: 'custom-airfield-marker',
+        html: '<div style="background-color: #007bff; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><span class="material-icons" style="font-size: 16px;">flight_takeoff</span></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -12]
+    });
+    
+    // Add marker for the airfield
+    var airfieldMarker = L.marker([airfieldLat, airfieldLng], {
+        icon: airfieldIcon
+    }).addTo(map);
+    
+    // Create popup content
+    var popupContent = '<div style="text-align: center;">' +
+        '<strong>' + airfieldIcao + '</strong><br>' +
+        airfieldName + '<br>' +
+        '<small class="text-muted">Lat: ' + airfieldLat.toFixed(6) + ', Lng: ' + airfieldLng.toFixed(6) + '</small>' +
+        '</div>';
+    
+    airfieldMarker.bindPopup(popupContent);
+    
+    // Simple size invalidation after DOM is ready
+    setTimeout(function() {
+        map.invalidateSize();
+    }, 100);
+});
+</script>
 
 {% endblock %}
