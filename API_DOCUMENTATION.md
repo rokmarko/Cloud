@@ -4,6 +4,17 @@ This document describes the private API endpoints for external servers to intera
 
 ## Version History
 
+### v1.3.0 (2025-08-22)
+- **Airfield Management**: Complete airfield database management via API
+- Added support for creating, updating, and querying aviation airfields with source tracking
+- **Bulk Operations**: Bulk import/update multiple airfields in single request with status reporting
+- **Geocoding API**: Reverse geocoding using aviation database with distance calculations
+- **Proximity Search**: Find nearest airfields within specified radius (up to 500km)
+- **Source Tracking**: Mandatory source field to track data origin for each airfield entry
+- **Admin Interface**: Web-based airfield management interface with search, edit, and delete capabilities
+- **Database Migration**: Automatic migration support for adding source tracking to existing data
+- **Enhanced Validation**: Improved coordinate validation and ICAO code formatting
+
 ### v1.2.0 (2025-07-30)
 - **Device Linking**: Logbook entries now link to the syncing device via device_id
 - **Device Information Priority**: Aircraft registration and type now preferentially use device information
@@ -29,10 +40,11 @@ This document describes the private API endpoints for external servers to intera
 2. [Base URL](#base-url)
 3. [External Device Management](#external-device-management)
 4. [ThingsBoard Integration](#thingsboard-integration)
-5. [API Endpoints](#api-endpoints)
-6. [Error Handling](#error-handling)
-7. [Usage Examples](#usage-examples)
-8. [Security Notes](#security-notes)
+5. [Airfield Database Management](#airfield-database-management)
+6. [API Endpoints](#api-endpoints)
+7. [Error Handling](#error-handling)
+8. [Usage Examples](#usage-examples)
+9. [Security Notes](#security-notes)
 
 ## Authentication
 
@@ -182,6 +194,43 @@ Recent sync information includes:
 - **Synced Devices**: Number successfully synced in last run
 - **New Entries**: Number of new logbook entries created
 - **Errors**: Any sync failures or issues
+
+## Airfield Database Management
+
+KanardiaCloud includes a comprehensive airfield database management system that supports both API-based operations and web-based administration.
+
+### Aviation Geocoding Service
+
+The system uses a database-driven approach for aviation-specific geocoding:
+
+- **ICAO Airfield Database**: Stores comprehensive airfield information including coordinates, elevation, runway data, and radio frequencies
+- **Proximity Search**: Find nearest airfields using Haversine formula calculations within customizable radius (max 500km)
+- **Reverse Geocoding**: Convert coordinates to aviation-specific location descriptions using nearest airfield
+- **Data Source Tracking**: Mandatory source field tracks who or what system loaded each airfield entry
+- **Automatic ICAO Formatting**: ICAO codes are automatically converted to uppercase for consistency
+- **Comprehensive Validation**: Real-time validation of coordinates, ICAO codes, and required fields
+
+### Supported Airfield Data
+
+Each airfield entry can contain:
+
+- **Basic Information**: ICAO code (4 characters, auto-uppercased), name, coordinates, country, region
+- **Aviation Details**: Elevation in feet, runway information (JSON), radio frequencies (JSON)
+- **Administrative**: Source tracking (mandatory), active status, creation/update timestamps
+- **Extended Data**: JSON-formatted runway specifications and frequency tables with flexible schema
+- **Geospatial**: Precise latitude/longitude coordinates with validation (-90/90, -180/180)
+
+### Admin Interface Integration
+
+The web-based admin interface provides:
+
+- **Comprehensive CRUD Operations**: Create, read, update, delete airfields with full field validation
+- **Advanced Search and Filtering**: Find airfields by country, region, ICAO code, or proximity with customizable radius
+- **Bulk Operations**: Mass import/export capabilities with detailed status reporting and error handling
+- **Real-time Data Validation**: Live validation of ICAO codes, coordinates, and data consistency
+- **External Integration Links**: Quick access to Google Maps and SkyVector for verification and cross-reference
+- **Source Management**: Track and display data sources for audit trails and data quality assurance
+- **Delete Operations**: Secure deletion with confirmation dialogs, including bulk delete all functionality
 
 ## API Endpoints
 
@@ -338,6 +387,426 @@ Check if the API is healthy and available.
 }
 ```
 
+### 5. Add or Update Airfield
+
+Add a new airfield or update an existing one in the geocoding database. The system automatically handles create vs. update operations based on ICAO code uniqueness.
+
+**Endpoint:** `POST /api/external/airfields`
+
+**Headers:**
+```
+Content-Type: application/json
+X-API-Key: your-api-key-here
+```
+
+**Request Body:**
+```json
+{
+  "icao_code": "LJLJ",
+  "name": "Ljubljana Jože Pučnik Airport",
+  "latitude": 46.2237,
+  "longitude": 14.4576,
+  "country": "Slovenia",
+  "region": "Central Europe",
+  "elevation_ft": 1273,
+  "source": "OpenFlights Database 2025",
+  "runway_info": {
+    "runways": [
+      {
+        "designation": "31/13",
+        "length_m": 3300,
+        "width_m": 45,
+        "surface": "Asphalt",
+        "lighting": "High Intensity"
+      }
+    ]
+  },
+  "frequencies": {
+    "tower": "118.100",
+    "ground": "121.700",
+    "approach": "119.100",
+    "departure": "119.100",
+    "atis": "126.225"
+  },
+  "is_active": true
+}
+```
+
+**Required Fields:**
+- `icao_code`: 4-letter ICAO airport code (automatically converted to uppercase, must be unique)
+- `name`: Airport name (max 200 characters)
+- `latitude`: Latitude in decimal degrees (range: -90.0 to 90.0)
+- `longitude`: Longitude in decimal degrees (range: -180.0 to 180.0)
+- `source`: Data source identifier (max 100 characters) - **Required for tracking data origin**
+
+**Optional Fields:**
+- `country`: Country name (max 50 characters)
+- `region`: Geographic region (max 50 characters)
+- `elevation_ft`: Elevation in feet above sea level (integer)
+- `runway_info`: JSON object with runway specifications (stored as text)
+- `frequencies`: JSON object with radio frequencies (stored as text)
+- `is_active`: Boolean flag indicating if airfield is active (defaults to true)
+
+**Data Processing:**
+- ICAO codes are automatically converted to uppercase for consistency
+- Coordinates are validated to ensure they fall within valid ranges
+- Existing airfields (same ICAO code) are updated; new ones are created
+- JSON fields (runway_info, frequencies) can contain any valid JSON structure
+- Source field is used for audit trails and data quality management
+
+**Success Response (201 - Created):**
+```json
+{
+  "success": true,
+  "message": "Airfield created successfully",
+  "airfield": {
+    "id": 123,
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Jože Pučnik Airport",
+    "latitude": 46.2237,
+    "longitude": 14.4576,
+    "country": "Slovenia",
+    "region": "Central Europe",
+    "elevation_ft": 1273,
+    "source": "OpenFlights Database 2025",
+    "is_active": true,
+    "created_at": "2025-08-22T10:30:00",
+    "updated_at": "2025-08-22T10:30:00",
+    "runway_info": {
+      "runways": [
+        {
+          "designation": "31/13",
+          "length_m": 3300,
+          "width_m": 45,
+          "surface": "Asphalt",
+          "lighting": "High Intensity"
+        }
+      ]
+    },
+    "frequencies": {
+      "tower": "118.100",
+      "ground": "121.700",
+      "approach": "119.100",
+      "departure": "119.100",
+      "atis": "126.225"
+    }
+  }
+}
+```
+
+**Success Response (200 - Updated):**
+```json
+{
+  "success": true,
+  "message": "Airfield updated successfully",
+  "airfield": {
+    "id": 123,
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Jože Pučnik Airport",
+    "latitude": 46.2237,
+    "longitude": 14.4576,
+    "country": "Slovenia",
+    "region": "Central Europe",
+    "elevation_ft": 1273,
+    "source": "OpenFlights Database 2025",
+    "is_active": true,
+    "created_at": "2025-08-20T08:15:00",
+    "updated_at": "2025-08-22T10:35:00",
+    "runway_info": {
+      "runways": [
+        {
+          "designation": "31/13",
+          "length_m": 3300,
+          "width_m": 45,
+          "surface": "Asphalt",
+          "lighting": "High Intensity"
+        }
+      ]
+    },
+    "frequencies": {
+      "tower": "118.100",
+      "ground": "121.700",
+      "approach": "119.100",
+      "departure": "119.100",
+      "atis": "126.225"
+    }
+  }
+}
+```
+
+**Error Response (400 - Validation Error):**
+```json
+{
+  "error": "Validation failed",
+  "message": "Missing required fields: source",
+  "details": {
+    "field": "source",
+    "requirement": "Source field is required for tracking data origin"
+  }
+}
+```
+
+**Error Response (400 - Invalid Coordinates):**
+```json
+{
+  "error": "Invalid coordinates",
+  "message": "Latitude must be between -90 and 90 degrees"
+}
+```
+
+### 6. Bulk Add/Update Airfields
+
+Add or update multiple airfields in a single request with detailed processing results and error reporting.
+
+**Endpoint:** `POST /api/external/airfields/bulk`
+
+**Headers:**
+```
+Content-Type: application/json
+X-API-Key: your-api-key-here
+```
+
+**Request Body:**
+```json
+{
+  "airfields": [
+    {
+      "icao_code": "LJLJ",
+      "name": "Ljubljana Jože Pučnik Airport",
+      "latitude": 46.2237,
+      "longitude": 14.4576,
+      "country": "Slovenia",
+      "region": "Central Europe",
+      "elevation_ft": 1273,
+      "source": "Bulk Import OpenFlights 2025",
+      "runway_info": {
+        "runways": [
+          {
+            "designation": "31/13",
+            "length_m": 3300,
+            "width_m": 45,
+            "surface": "Asphalt"
+          }
+        ]
+      },
+      "frequencies": {
+        "tower": "118.100",
+        "ground": "121.700",
+        "approach": "119.100"
+      }
+    },
+    {
+      "icao_code": "LJMB",
+      "name": "Maribor Edvard Rusjan Airport",
+      "latitude": 46.4796,
+      "longitude": 15.6861,
+      "country": "Slovenia",
+      "region": "Central Europe",
+      "elevation_ft": 879,
+      "source": "Bulk Import OpenFlights 2025"
+    },
+    {
+      "icao_code": "LJPZ",
+      "name": "Portorož Airport",
+      "latitude": 45.4733,
+      "longitude": 13.6150,
+      "country": "Slovenia",
+      "source": "Bulk Import OpenFlights 2025"
+    }
+  ]
+}
+```
+
+**Requirements:**
+- Each airfield must include the same required fields as single airfield upload
+- All ICAO codes are automatically converted to uppercase
+- Source field is required for each airfield entry
+- Maximum recommended batch size: 100 airfields per request
+- Processing is atomic per airfield (individual failures don't affect others)
+
+**Success Response (200):**
+```json
+{
+  "status": "completed",
+  "message": "Processed 3 airfields",
+  "results": {
+    "created": 2,
+    "updated": 1,
+    "errors": []
+  }
+}
+```
+
+**Partial Success Response (200 - With Errors):**
+```json
+{
+  "status": "completed",
+  "message": "Processed 3 airfields",
+  "results": {
+    "created": 1,
+    "updated": 0,
+    "errors": [
+      {
+        "index": 1,
+        "icao_code": "LJMB",
+        "error": "Missing required fields: source"
+      },
+      {
+        "index": 2,
+        "icao_code": "INVALID",
+        "error": "Latitude must be between -90 and 90 degrees"
+      }
+    ]
+  }
+}
+```
+
+**Error Response (400 - Invalid Format):**
+```json
+{
+  "error": "Invalid format",
+  "message": "JSON payload with 'airfields' array required"
+}
+```
+
+**Bulk Operation Features:**
+- **Atomic Processing**: Each airfield is processed independently
+- **Detailed Error Reporting**: Specific error messages with array index and ICAO code
+- **Mixed Results Support**: Successful operations proceed even if some fail
+- **Comprehensive Statistics**: Count of created, updated, and failed operations
+- **Source Validation**: Ensures all entries have proper source tracking
+```
+
+### 7. Query Airfields
+
+Retrieve airfields with optional filtering and proximity search.
+
+**Endpoint:** `GET /api/external/airfields`
+
+**Headers:**
+```
+X-API-Key: your-api-key-here
+```
+
+**Query Parameters:**
+- `country`: Filter by country name
+- `region`: Filter by region
+- `icao_code`: Get specific airfield by ICAO code
+- `lat`: Latitude for proximity search (requires lon and optional radius_km)
+- `lon`: Longitude for proximity search (requires lat and optional radius_km)
+- `radius_km`: Search radius in kilometers (default: 25.0, max: 500.0)
+
+**Examples:**
+
+Get specific airfield:
+```
+GET /api/external/airfields?icao_code=LJLJ
+```
+
+Find airfields by country:
+```
+GET /api/external/airfields?country=Slovenia
+```
+
+Find nearest airfields:
+```
+GET /api/external/airfields?lat=46.2237&lon=14.4576&radius_km=50
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "count": 2,
+  "airfields": [
+    {
+      "id": 123,
+      "icao_code": "LJLJ",
+      "name": "Ljubljana Airport",
+      "latitude": 46.2237,
+      "longitude": 14.4576,
+      "country": "Slovenia",
+      "region": "Central Europe",
+      "elevation_ft": 1273,
+      "source": "External API Import",
+      "is_active": true,
+      "distance_km": 0.0
+    },
+    {
+      "id": 124,
+      "icao_code": "LJPZ",
+      "name": "Portorož Airport",
+      "latitude": 45.4733,
+      "longitude": 13.6150,
+      "country": "Slovenia",
+      "region": "Central Europe",
+      "elevation_ft": 7,
+      "source": "Legacy Data",
+      "is_active": true,
+      "distance_km": 83.2
+    }
+  ]
+}
+```
+
+### 8. Reverse Geocoding
+
+Convert coordinates to nearest aviation location using the airfield database.
+
+**Endpoint:** `POST /api/external/geocode`
+
+**Headers:**
+```
+Content-Type: application/json
+X-API-Key: your-api-key-here
+```
+
+**Request Body:**
+```json
+{
+  "latitude": 46.2237,
+  "longitude": 14.4576
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "location": "LJLJ - Ljubljana Airport",
+  "latitude": 46.2237,
+  "longitude": 14.4576,
+  "nearest_airfield": {
+    "id": 123,
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Airport",
+    "latitude": 46.2237,
+    "longitude": 14.4576,
+    "country": "Slovenia",
+    "distance_km": 0.0
+  }
+}
+```
+
+**Response when near (but not at) an airfield:**
+```json
+{
+  "success": true,
+  "location": "Near LJLJ - Ljubljana Airport (5.2km)",
+  "latitude": 46.2700,
+  "longitude": 14.5000,
+  "nearest_airfield": {
+    "id": 123,
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Airport",
+    "latitude": 46.2237,
+    "longitude": 14.4576,
+    "country": "Slovenia",
+    "distance_km": 5.2
+  }
+}
+```
+
 ## Error Handling
 
 All endpoints return JSON responses with consistent error formatting:
@@ -360,6 +829,162 @@ Common HTTP status codes:
 - `500`: Internal server error
 
 ## Usage Examples
+
+### Airfield Database Management
+
+#### Adding a Single Airfield
+
+```bash
+curl -X POST https://your-domain.com/api/external/airfields \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Jože Pučnik Airport",
+    "latitude": 46.2237,
+    "longitude": 14.4576,
+    "country": "Slovenia",
+    "region": "Central Europe",
+    "elevation_ft": 1273,
+    "source": "OpenFlights Database Import 2025",
+    "runway_info": {
+      "runways": [
+        {
+          "designation": "31/13",
+          "length_m": 3300,
+          "width_m": 45,
+          "surface": "Asphalt",
+          "lighting": "High Intensity",
+          "ils": true
+        }
+      ]
+    },
+    "frequencies": {
+      "tower": "118.100",
+      "ground": "121.700",
+      "approach": "119.100",
+      "departure": "119.100",
+      "atis": "126.225"
+    },
+    "is_active": true
+  }'
+```
+
+#### Bulk Import Multiple Airfields
+
+```bash
+curl -X POST https://your-domain.com/api/external/airfields/bulk \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{
+    "airfields": [
+      {
+        "icao_code": "LJLJ",
+        "name": "Ljubljana Jože Pučnik Airport",
+        "latitude": 46.2237,
+        "longitude": 14.4576,
+        "country": "Slovenia",
+        "region": "Central Europe",
+        "elevation_ft": 1273,
+        "source": "Bulk Import Slovenia Airports 2025"
+      },
+      {
+        "icao_code": "LJMB", 
+        "name": "Maribor Edvard Rusjan Airport",
+        "latitude": 46.4796,
+        "longitude": 15.6861,
+        "country": "Slovenia",
+        "region": "Central Europe",
+        "elevation_ft": 879,
+        "source": "Bulk Import Slovenia Airports 2025"
+      },
+      {
+        "icao_code": "LJPZ",
+        "name": "Portorož Airport",
+        "latitude": 45.4733,
+        "longitude": 13.6150,
+        "country": "Slovenia",
+        "region": "Central Europe",
+        "elevation_ft": 7,
+        "source": "Bulk Import Slovenia Airports 2025"
+      }
+    ]
+  }'
+```
+
+#### Query Airfields by Location
+
+```bash
+# Find nearest airfields within 50km
+curl -X GET "https://your-domain.com/api/external/airfields?lat=46.2237&lon=14.4576&radius_km=50" \
+  -H "X-API-Key: your-api-key-here"
+
+# Get specific airfield by ICAO code
+curl -X GET "https://your-domain.com/api/external/airfields?icao_code=LJLJ" \
+  -H "X-API-Key: your-api-key-here"
+
+# Get all airfields in Slovenia
+curl -X GET "https://your-domain.com/api/external/airfields?country=Slovenia" \
+  -H "X-API-Key: your-api-key-here"
+```
+
+#### Reverse Geocoding
+
+```bash
+curl -X POST https://your-domain.com/api/external/geocode \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{
+    "latitude": 46.2237,
+    "longitude": 14.4576
+  }'
+```
+    ]
+  }'
+```
+
+#### Querying Airfields by Country
+
+```bash
+curl -H "X-API-Key: your-api-key-here" \
+  "https://your-domain.com/api/external/airfields?country=Slovenia"
+```
+
+#### Proximity Search for Nearest Airfields
+
+```bash
+curl -H "X-API-Key: your-api-key-here" \
+  "https://your-domain.com/api/external/airfields?lat=46.2237&lon=14.4576&radius_km=50"
+```
+
+#### Reverse Geocoding Coordinates
+
+```bash
+curl -X POST https://your-domain.com/api/external/geocode \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{
+    "latitude": 46.2237,
+    "longitude": 14.4576
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "location": "LJLJ - Ljubljana Airport",
+  "latitude": 46.2237,
+  "longitude": 14.4576,
+  "nearest_airfield": {
+    "id": 123,
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Airport",
+    "country": "Slovenia",
+    "distance_km": 0.0
+  }
+}
+```
 
 ### Logbook Sync Integration
 
@@ -467,6 +1092,113 @@ if response.status_code == 201:
 else:
     print(f"Error: {response.status_code}")
     print(response.json())
+
+# Add single airfield
+airfield_payload = {
+    "icao_code": "LJLJ",
+    "name": "Ljubljana Jože Pučnik Airport",
+    "latitude": 46.2237,
+    "longitude": 14.4576,
+    "country": "Slovenia",
+    "region": "Central Europe",
+    "elevation_ft": 1273,
+    "source": "Python API Client 2025",
+    "runway_info": {
+        "runways": [
+            {
+                "designation": "31/13",
+                "length_m": 3300,
+                "width_m": 45,
+                "surface": "Asphalt"
+            }
+        ]
+    },
+    "frequencies": {
+        "tower": "118.100",
+        "ground": "121.700",
+        "approach": "119.100"
+    },
+    "is_active": True
+}
+
+response = requests.post(f"{BASE_URL}/airfields", json=airfield_payload, headers=headers)
+
+if response.status_code in [200, 201]:
+    print("Airfield added/updated successfully!")
+    print(f"Status: {response.json().get('message')}")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.json())
+
+# Bulk import airfields
+bulk_payload = {
+    "airfields": [
+        {
+            "icao_code": "LJLJ",
+            "name": "Ljubljana Jože Pučnik Airport",
+            "latitude": 46.2237,
+            "longitude": 14.4576,
+            "country": "Slovenia",
+            "source": "Python Bulk Import 2025"
+        },
+        {
+            "icao_code": "LJMB",
+            "name": "Maribor Edvard Rusjan Airport",
+            "latitude": 46.4796,
+            "longitude": 15.6861,
+            "country": "Slovenia",
+            "source": "Python Bulk Import 2025"
+        }
+    ]
+}
+
+response = requests.post(f"{BASE_URL}/airfields/bulk", json=bulk_payload, headers=headers)
+
+if response.status_code == 200:
+    results = response.json()
+    print(f"Bulk import completed: {results['message']}")
+    print(f"Created: {results['results']['created']}")
+    print(f"Updated: {results['results']['updated']}")
+    if results['results']['errors']:
+        print(f"Errors: {len(results['results']['errors'])}")
+        for error in results['results']['errors']:
+            print(f"  - {error['icao_code']}: {error['error']}")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.json())
+
+# Query airfields by location
+response = requests.get(f"{BASE_URL}/airfields", 
+                       params={"lat": 46.2237, "lon": 14.4576, "radius_km": 50},
+                       headers={"X-API-Key": API_KEY})
+
+if response.status_code == 200:
+    airfields_data = response.json()
+    print(f"Found {airfields_data['count']} airfields nearby:")
+    for airfield in airfields_data['airfields']:
+        print(f"  - {airfield['icao_code']}: {airfield['name']} ({airfield.get('distance_km', 'N/A')}km)")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.json())
+
+# Reverse geocoding
+geocode_payload = {
+    "latitude": 46.2237,
+    "longitude": 14.4576
+}
+
+response = requests.post(f"{BASE_URL}/geocode", json=geocode_payload, headers=headers)
+
+if response.status_code == 200:
+    location_data = response.json()
+    print(f"Location: {location_data['location']}")
+    if location_data['nearest_airfield']:
+        airfield = location_data['nearest_airfield']
+        print(f"Nearest airfield: {airfield['icao_code']} - {airfield['name']}")
+        print(f"Distance: {airfield['distance_km']}km")
+else:
+    print(f"Error: {response.status_code}")
+    print(response.json())
 ```
 
 ### curl Example
@@ -501,6 +1233,105 @@ curl -X POST "http://localhost:5000/api/external/unclaim-device" \
   }'
 ```
 
+## Best Practices for Airfield Data
+
+### Data Quality Guidelines
+
+When importing airfield data, ensure:
+
+- **ICAO Code Accuracy**: Use official 4-letter ICAO codes from authoritative sources
+- **Coordinate Precision**: Provide coordinates with at least 4 decimal places for accuracy
+- **Consistent Naming**: Use official airport names as published in aeronautical publications
+- **Source Attribution**: Always specify the data source for traceability and validation
+
+### Recommended Data Sources
+
+**Free and Open Sources:**
+- **OurAirports.com**: Comprehensive global airport database with regular updates
+- **OpenFlights.org**: Open source database of airports, airlines, and routes
+- **FAA NASR Data**: Official US airports and facilities data (monthly releases)
+- **Wikipedia**: Airport lists by country (verify data independently)
+
+**Official Aviation Sources:**
+- **ICAO Publications**: Official aeronautical information and standards
+- **National AIP**: Each country's Aeronautical Information Publication
+- **EUROCONTROL**: European aviation data and statistics
+- **Local Aviation Authorities**: Country-specific official airport data
+
+### Data Validation and Import Tips
+
+**Pre-Import Validation:**
+```python
+def validate_airfield_data(airfield):
+    # ICAO code validation
+    if not re.match(r'^[A-Z]{4}$', airfield['icao_code']):
+        return False, "ICAO code must be 4 uppercase letters"
+    
+    # Coordinate validation
+    if not (-90 <= airfield['latitude'] <= 90):
+        return False, "Latitude must be between -90 and 90"
+    
+    if not (-180 <= airfield['longitude'] <= 180):
+        return False, "Longitude must be between -180 and 180"
+    
+    return True, "Valid"
+```
+
+**Bulk Import Best Practices:**
+- Process in batches of 50-100 airfields per request for optimal performance
+- Include consistent source attribution for data lineage
+- Validate data locally before uploading to minimize API errors
+- Handle partial failures gracefully and retry failed items
+- Monitor API response for detailed error information
+- Use transaction-like processing where possible
+
+**Common Data Issues to Avoid:**
+- Duplicate ICAO codes (each must be unique globally)
+- Incorrect coordinate formats (use decimal degrees, not DMS)
+- Missing required fields (icao_code, name, latitude, longitude)
+- Invalid JSON in optional fields (runway_info, frequencies)
+- Inconsistent country/region naming
+
+### Example Import Workflow
+
+```python
+import requests
+import json
+
+def bulk_import_airfields(airfields_data, api_key, batch_size=50):
+    """Import airfields in batches with error handling."""
+    base_url = "https://your-domain.com/api/external"
+    headers = {
+        "Content-Type": "application/json",
+        "X-API-Key": api_key
+    }
+    
+    results = {"success": 0, "failed": 0, "errors": []}
+    
+    # Process in batches
+    for i in range(0, len(airfields_data), batch_size):
+        batch = airfields_data[i:i+batch_size]
+        
+        payload = {"airfields": batch}
+        response = requests.post(
+            f"{base_url}/airfields/bulk", 
+            headers=headers, 
+            json=payload
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            results["success"] += result["results"]["created"]
+            results["success"] += result["results"]["updated"]
+            if result["results"]["errors"]:
+                results["errors"].extend(result["results"]["errors"])
+        else:
+            results["failed"] += len(batch)
+            results["errors"].append(f"Batch {i//batch_size + 1}: {response.text}")
+    
+    return results
+```
+
 ## Security Notes
 
 1. **API Key Security**: Keep your API key secure and never expose it in client-side code
@@ -508,6 +1339,79 @@ curl -X POST "http://localhost:5000/api/external/unclaim-device" \
 3. **Rate Limiting**: Consider implementing rate limiting for production use
 4. **Logging**: All API calls are logged for security monitoring
 5. **User Validation**: Only active and verified users can have devices claimed for them
+6. **Source Field Security**: The source field is logged and audited for data integrity and tracking purposes
+
+## Airfield Data Best Practices
+
+### Data Quality Guidelines
+
+- **ICAO Codes**: Use standard 4-letter ICAO codes (automatically converted to uppercase)
+- **Coordinates**: Provide precise decimal coordinates (6+ decimal places for accuracy)
+- **Source Tracking**: Always include a meaningful source field for audit trails and data management
+- **Validation**: Validate coordinates are within valid ranges (-90/90 for lat, -180/180 for lon)
+
+### Source Field Recommendations
+
+The `source` field should be descriptive and include:
+- Data source name (e.g., "OpenFlights Database")
+- Version or date (e.g., "2025-08-22")
+- Import method (e.g., "Bulk API Import")
+- Organization (e.g., "ACME Aviation Data")
+
+**Examples of good source values:**
+- `"OpenFlights Database Import 2025-08-22"`
+- `"Official AIP Slovenia 2025"`
+- `"Manual Entry by ATC Tower LJLJ"`
+- `"Jeppesen Database Export v25.8"`
+- `"Internal Survey Team 2025-Q3"`
+
+### JSON Field Structure
+
+For `runway_info` and `frequencies` fields, maintain consistent structure:
+
+**Runway Info Example:**
+```json
+{
+  "runways": [
+    {
+      "designation": "09/27",
+      "length_m": 2500,
+      "width_m": 45,
+      "surface": "Asphalt",
+      "lighting": "Medium Intensity",
+      "ils": false,
+      "papi": true
+    }
+  ]
+}
+```
+
+**Frequencies Example:**
+```json
+{
+  "tower": "118.100",
+  "ground": "121.700",
+  "approach": "119.100",
+  "departure": "119.100",
+  "atis": "126.225",
+  "multicom": "122.900"
+}
+```
+
+### Bulk Import Optimization
+
+- **Batch Size**: Limit bulk requests to 100 airfields per request for optimal performance
+- **Error Handling**: Check the results array for individual failures and retry if needed
+- **Source Consistency**: Use consistent source values for related data imports
+- **Validation**: Pre-validate data locally before bulk import to minimize API errors
+
+### Common Validation Errors
+
+1. **Missing Source Field**: Source field is required for all airfield entries
+2. **Invalid Coordinates**: Latitude/longitude outside valid ranges
+3. **Duplicate ICAO Codes**: Same ICAO code within a bulk request
+4. **Invalid JSON**: Malformed runway_info or frequencies JSON
+5. **Character Limits**: Exceeding field length limits (name: 200, source: 100, etc.)
 
 ## Support
 
