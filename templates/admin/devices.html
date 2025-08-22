@@ -186,6 +186,22 @@
                                             </li>
                                             <li><hr class="dropdown-divider"></li>
                                             <li>
+                                                <a class="dropdown-item text-danger" href="#" onclick="deleteAllEvents({{ device.id }}, '{{ device.name }}')">
+                                                    <span class="material-icons me-2">delete_sweep</span> Delete All Events
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="#" onclick="deleteAllLogbookEntries({{ device.id }}, '{{ device.name }}')">
+                                                    <span class="material-icons me-2">auto_delete</span> Delete All Logbook Entries
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="#" onclick="deleteFlightDetails({{ device.id }}, '{{ device.name }}')">
+                                                    <span class="material-icons me-2">flight_takeoff</span> Delete Flight Details
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
                                                 <form method="POST" action="{{ url_for('admin.unlink_device', device_id=device.id) }}" class="m-0">
                                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                     <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to unlink this device from the user? This action cannot be undone.')">
@@ -491,6 +507,129 @@ function unlinkDeviceAPI(deviceId, deviceName, ownerNickname) {
             console.error('Error unlinking device:', error);
             showAlert('error', 'Error unlinking device. Please try again.');
         });
+    }
+}
+
+/**
+ * Delete all events for a device (this also deletes associated logbook entries and flight points)
+ * @param {number} deviceId - The ID of the device
+ * @param {string} deviceName - The name of the device
+ */
+function deleteAllEvents(deviceId, deviceName) {
+    if (confirm(`⚠️ DELETE ALL EVENTS ⚠️\n\nAre you sure you want to DELETE ALL EVENTS for "${deviceName}"?\n\nThis action will:\n• Delete ALL events for this device\n• Delete ALL associated logbook entries\n• Delete ALL flight points data\n• This process cannot be undone\n\nThis is a DESTRUCTIVE operation!\n\nContinue with deletion?`)) {
+        const confirmation = prompt('Type "DELETE ALL EVENTS" to confirm this destructive action:');
+        if (confirmation === 'DELETE ALL EVENTS') {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // Show loading indicator
+            showAlert('info', 'Deleting all events... This may take a few moments.');
+            
+            fetch(`/admin/devices/${deviceId}/delete-all-events`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `csrf_token=${csrfToken}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message || 'Error deleting events. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting all events:', error);
+                showAlert('error', 'Error deleting all events. Please try again.');
+            });
+        } else if (confirmation !== null) {
+            alert('Deletion cancelled. You must type "DELETE ALL EVENTS" exactly to confirm.');
+        }
+    }
+}
+
+/**
+ * Delete all logbook entries for a device
+ * @param {number} deviceId - The ID of the device
+ * @param {string} deviceName - The name of the device
+ */
+function deleteAllLogbookEntries(deviceId, deviceName) {
+    if (confirm(`⚠️ DELETE ALL LOGBOOK ENTRIES ⚠️\n\nAre you sure you want to DELETE ALL LOGBOOK ENTRIES for "${deviceName}"?\n\nThis action will:\n• Delete ALL logbook entries for this device\n• Remove flight history data\n• This process cannot be undone\n\nThis is a DESTRUCTIVE operation!\n\nContinue with deletion?`)) {
+        const confirmation = prompt('Type "DELETE LOGBOOK" to confirm this destructive action:');
+        if (confirmation === 'DELETE LOGBOOK') {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // Show loading indicator
+            showAlert('info', 'Deleting all logbook entries... This may take a few moments.');
+            
+            fetch(`/admin/devices/${deviceId}/delete-logbook-entries`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `csrf_token=${csrfToken}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message || 'Error deleting logbook entries. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting logbook entries:', error);
+                showAlert('error', 'Error deleting logbook entries. Please try again.');
+            });
+        } else if (confirmation !== null) {
+            alert('Deletion cancelled. You must type "DELETE LOGBOOK" exactly to confirm.');
+        }
+    }
+}
+
+/**
+ * Delete flight details (flight points) for a device
+ * @param {number} deviceId - The ID of the device
+ * @param {string} deviceName - The name of the device
+ */
+function deleteFlightDetails(deviceId, deviceName) {
+    if (confirm(`⚠️ DELETE FLIGHT DETAILS ⚠️\n\nAre you sure you want to DELETE ALL FLIGHT DETAILS for "${deviceName}"?\n\nThis action will:\n• Delete ALL flight points/tracks for this device\n• Remove detailed flight path data\n• Keep logbook entries but remove detailed flight information\n• This process cannot be undone\n\nThis is a DESTRUCTIVE operation!\n\nContinue with deletion?`)) {
+        const confirmation = prompt('Type "DELETE FLIGHT DETAILS" to confirm this destructive action:');
+        if (confirmation === 'DELETE FLIGHT DETAILS') {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // Show loading indicator
+            showAlert('info', 'Deleting flight details... This may take a few moments.');
+            
+            fetch(`/admin/devices/${deviceId}/delete-flight-details`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: `csrf_token=${csrfToken}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message || 'Error deleting flight details. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting flight details:', error);
+                showAlert('error', 'Error deleting flight details. Please try again.');
+            });
+        } else if (confirmation !== null) {
+            alert('Deletion cancelled. You must type "DELETE FLIGHT DETAILS" exactly to confirm.');
+        }
     }
 }
 

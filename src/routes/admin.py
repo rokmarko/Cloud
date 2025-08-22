@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from datetime import datetime, timedelta
 from src.app import db
-from src.models import User, Device, Checklist, LogbookEntry, Pilot, Event
+from src.models import User, Device, Checklist, LogbookEntry, Pilot, Event, FlightPoint
 from src.forms import PilotMappingForm
 from src.services.thingsboard_sync import thingsboard_sync
 from src.services.scheduler import task_scheduler
@@ -241,6 +241,116 @@ def force_rebuild_logbook(device_id):
     except Exception as e:
         db.session.rollback()
         error_msg = f"Error during force rebuild for device {device.name}: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({
+            'success': False,
+            'message': error_msg
+        })
+
+
+@admin_bp.route('/devices/<int:device_id>/delete-all-events', methods=['POST'])
+@login_required
+@admin_required
+def delete_all_events(device_id):
+    """Delete all events for a device (also deletes associated logbook entries and flight points)."""
+    device = Device.query.get_or_404(device_id)
+    
+    try:
+        # Count existing data before deletion
+        events_count = Event.query.filter_by(device_id=device.id).count()
+        logbook_entries_count = LogbookEntry.query.filter_by(device_id=device.id).count()
+        
+        # Delete all events (this should cascade to delete logbook entries and flight points)
+        deleted_events = Event.query.filter_by(device_id=device.id).delete()
+        
+        # Also explicitly delete logbook entries to be sure
+        deleted_logbook = LogbookEntry.query.filter_by(device_id=device.id).delete()
+        
+        # Commit the changes
+        db.session.commit()
+        
+        message = (f"Deleted all events for device '{device.name}': "
+                  f"removed {deleted_events} events and {deleted_logbook} logbook entries")
+        
+        logger.info(message)
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = f"Error deleting all events for device {device.name}: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({
+            'success': False,
+            'message': error_msg
+        })
+
+
+@admin_bp.route('/devices/<int:device_id>/delete-logbook-entries', methods=['POST'])
+@login_required
+@admin_required
+def delete_logbook_entries(device_id):
+    """Delete all logbook entries for a device."""
+    device = Device.query.get_or_404(device_id)
+    
+    try:
+        # Count existing logbook entries before deletion
+        logbook_entries_count = LogbookEntry.query.filter_by(device_id=device.id).count()
+        
+        # Delete all logbook entries for this device
+        deleted_count = LogbookEntry.query.filter_by(device_id=device.id).delete()
+        
+        # Commit the changes
+        db.session.commit()
+        
+        message = f"Deleted all logbook entries for device '{device.name}': removed {deleted_count} entries"
+        
+        logger.info(message)
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = f"Error deleting logbook entries for device {device.name}: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({
+            'success': False,
+            'message': error_msg
+        })
+
+
+@admin_bp.route('/devices/<int:device_id>/delete-flight-details', methods=['POST'])
+@login_required
+@admin_required
+def delete_flight_details(device_id):
+    """Delete flight details (flight points) for a device."""
+    device = Device.query.get_or_404(device_id)
+    
+    try:
+        # Count existing flight points before deletion
+        flight_points_count = FlightPoint.query.filter_by(device_id=device.id).count()
+        
+        # Delete all flight points for this device
+        deleted_count = FlightPoint.query.filter_by(device_id=device.id).delete()
+        
+        # Commit the changes
+        db.session.commit()
+        
+        message = f"Deleted flight details for device '{device.name}': removed {deleted_count} flight points"
+        
+        logger.info(message)
+        return jsonify({
+            'success': True,
+            'message': message
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        error_msg = f"Error deleting flight details for device {device.name}: {str(e)}"
         logger.error(error_msg)
         return jsonify({
             'success': False,
