@@ -3,6 +3,7 @@ Database models for KanardiaCloud
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Dict, Any
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer
@@ -603,3 +604,109 @@ class Event(db.Model):
         active_events = self.get_active_events()
         events_str = ', '.join(active_events) if active_events else 'None'
         return f'<Event {self.id} Device:{self.device_id} Events:[{events_str}]>'
+
+
+class Airfield(db.Model):
+    """ICAO airfield model for geocoding services."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    icao_code = db.Column(db.String(4), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    country = db.Column(db.String(50))
+    region = db.Column(db.String(50))
+    elevation_ft = db.Column(db.Integer)  # Elevation in feet
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Additional aviation-specific fields
+    runway_info = db.Column(db.Text)  # JSON string with runway information
+    frequencies = db.Column(db.Text)  # JSON string with radio frequencies
+    
+    def __repr__(self):
+        return f'<Airfield {self.icao_code} - {self.name}>'
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert airfield to dictionary format."""
+        return {
+            'id': self.id,
+            'icao_code': self.icao_code,
+            'name': self.name,
+            'latitude': self.latitude,
+            'longitude': self.longitude,
+            'country': self.country,
+            'region': self.region,
+            'elevation_ft': self.elevation_ft,
+            'is_active': self.is_active,
+            'runway_info': self.runway_info,
+            'frequencies': self.frequencies
+        }
+    
+    @classmethod
+    def find_nearest(cls, latitude: float, longitude: float, max_distance_km: float = 25.0, limit: int = 10):
+        """
+        Find nearest airfields using database query with distance calculation.
+        
+        Args:
+            latitude: Target latitude
+            longitude: Target longitude
+            max_distance_km: Maximum search distance in kilometers
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of tuples (airfield, distance_km)
+        """
+        import math
+        
+        # Convert max distance to rough coordinate bounds for initial filtering
+        # 1 degree latitude ≈ 111 km
+        lat_delta = max_distance_km / 111.0
+        lon_delta = max_distance_km / (111.0 * math.cos(math.radians(latitude)))
+        
+        # Query airfields within rough bounding box
+        nearby_airfields = cls.query.filter(
+            cls.is_active == True,
+            cls.latitude >= latitude - lat_delta,
+            cls.latitude <= latitude + lat_delta,
+            cls.longitude >= longitude - lon_delta,
+            cls.longitude <= longitude + lon_delta
+        ).all()
+        
+        # Calculate precise distances and filter
+        results = []
+        for airfield in nearby_airfields:
+            distance = cls._calculate_distance(
+                latitude, longitude,
+                airfield.latitude, airfield.longitude
+            )
+            if distance <= max_distance_km:
+                results.append((airfield, distance))
+        
+        # Sort by distance and limit results
+        results.sort(key=lambda x: x[1])
+        return results[:limit]
+    
+    @staticmethod
+    def _calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Calculate distance between two points using Haversine formula."""
+        import math
+        
+        # Convert latitude and longitude from degrees to radians
+        lat1_rad = math.radians(lat1)
+        lon1_rad = math.radians(lon1)
+        lat2_rad = math.radians(lat2)
+        lon2_rad = math.radians(lon2)
+        
+        # Haversine formula
+        dlat = lat2_rad - lat1_rad
+        dlon = lon2_rad - lon1_rad
+        a = (math.sin(dlat/2)**2 + 
+             math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2)
+        c = 2 * math.asin(math.sqrt(a))
+        
+        # Radius of earth in kilometers
+        r = 6371
+        
+        return c * r

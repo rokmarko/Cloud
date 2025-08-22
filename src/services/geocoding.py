@@ -17,38 +17,6 @@ logger = logging.getLogger(__name__)
 class AviationGeocoder:
     """Aviation-focused reverse geocoder using ICAO airfield database."""
     
-    # Enhanced ICAO airfields database for Central Europe
-    ICAO_AIRFIELDS = {
-        # Slovenia
-        'LJLJ': {'name': 'Ljubljana Airport', 'lat': 46.2237, 'lon': 14.4576},
-        'LJMB': {'name': 'Maribor Airport', 'lat': 46.4798, 'lon': 15.6866},
-        'LJPZ': {'name': 'Portorož Airport', 'lat': 45.4733, 'lon': 13.6150},
-        'LJCE': {'name': 'Celje Airport', 'lat': 46.2256, 'lon': 15.2522},
-        
-        # Austria
-        'LOWW': {'name': 'Vienna International Airport', 'lat': 48.1103, 'lon': 16.5697},
-        'LOWS': {'name': 'Salzburg Airport', 'lat': 47.7933, 'lon': 13.0042},
-        'LOWI': {'name': 'Innsbruck Airport', 'lat': 47.2602, 'lon': 11.3540},
-        'LOWG': {'name': 'Graz Airport', 'lat': 46.9911, 'lon': 15.4396},
-        'LOWL': {'name': 'Linz Airport', 'lat': 48.2332, 'lon': 14.1875},
-        'LOWK': {'name': 'Klagenfurt Airport', 'lat': 46.6425, 'lon': 14.3377},
-        
-        # Italy
-        'LIPZ': {'name': 'Venice Marco Polo Airport', 'lat': 45.5053, 'lon': 12.3519},
-        'LIPH': {'name': 'Treviso Airport', 'lat': 45.6484, 'lon': 12.1944},
-        'LIPB': {'name': 'Bolzano Airport', 'lat': 46.4602, 'lon': 11.3264},
-        'LIPU': {'name': 'Udine Airport', 'lat': 46.0347, 'lon': 13.1806},
-        'LIMC': {'name': 'Milan Malpensa Airport', 'lat': 45.6306, 'lon': 8.7281},
-        
-        # Croatia
-        'LDZA': {'name': 'Zagreb Airport', 'lat': 46.9981, 'lon': 16.0689},
-        'LDPL': {'name': 'Pula Airport', 'lat': 44.8935, 'lon': 13.9220},
-        'LDRI': {'name': 'Rijeka Airport', 'lat': 45.2169, 'lon': 14.5703},
-        
-        # Hungary
-        'LHBP': {'name': 'Budapest Ferenc Liszt International Airport', 'lat': 47.4369, 'lon': 19.2556},
-    }
-    
     # Regional boundaries for fallback identification
     REGIONS = {
         'Slovenia': {'lat_range': (45.4, 46.9), 'lon_range': (13.4, 16.6)},
@@ -70,14 +38,14 @@ class AviationGeocoder:
         Returns:
             Human-readable location description
         """
-        # Check for nearby ICAO airfields
+        # Check for nearby ICAO airfields in database
         nearest_airfield = self._find_nearest_airfield(lat, lon)
         if nearest_airfield:
             distance_km = nearest_airfield['distance']
             if distance_km < 2.0:
-                return f"{nearest_airfield['icao']} - {nearest_airfield['name']}"
+                return f"{nearest_airfield['icao_code']} - {nearest_airfield['name']}"
             else:
-                return f"Near {nearest_airfield['icao']} - {nearest_airfield['name']} ({distance_km:.1f}km)"
+                return f"Near {nearest_airfield['icao_code']} - {nearest_airfield['name']} ({distance_km:.1f}km)"
         
         # Fall back to region detection
         region = self._get_region_name(lat, lon)
@@ -85,7 +53,7 @@ class AviationGeocoder:
     
     def _find_nearest_airfield(self, lat: float, lon: float, max_distance_km: float = 25.0) -> Optional[Dict[str, Any]]:
         """
-        Find nearest ICAO airfield within specified distance.
+        Find nearest ICAO airfield within specified distance using database.
         
         Args:
             lat: Target latitude
@@ -95,56 +63,30 @@ class AviationGeocoder:
         Returns:
             Dictionary with airfield info and distance, or None if none found
         """
-        nearest_airfield = None
-        min_distance = float('inf')
-        
-        for icao_code, airfield_data in self.ICAO_AIRFIELDS.items():
-            distance = self._calculate_distance(
-                lat, lon,
-                airfield_data['lat'], airfield_data['lon']
-            )
+        try:
+            from src.models import Airfield
             
-            if distance < min_distance and distance <= max_distance_km:
-                min_distance = distance
-                nearest_airfield = {
-                    'icao': icao_code,
-                    'name': airfield_data['name'],
+            # Use the Airfield model's find_nearest method
+            results = Airfield.find_nearest(lat, lon, max_distance_km, limit=1)
+            
+            if results:
+                airfield, distance = results[0]
+                return {
+                    'icao_code': airfield.icao_code,
+                    'name': airfield.name,
                     'distance': distance,
-                    'lat': airfield_data['lat'],
-                    'lon': airfield_data['lon']
+                    'lat': airfield.latitude,
+                    'lon': airfield.longitude,
+                    'country': airfield.country,
+                    'region': airfield.region
                 }
-        
-        return nearest_airfield
-    
-    def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """
-        Calculate distance between two points using Haversine formula.
-        
-        Args:
-            lat1, lon1: First point coordinates
-            lat2, lon2: Second point coordinates
             
-        Returns:
-            Distance in kilometers
-        """
-        # Convert latitude and longitude from degrees to radians
-        lat1_rad = math.radians(lat1)
-        lon1_rad = math.radians(lon1)
-        lat2_rad = math.radians(lat2)
-        lon2_rad = math.radians(lon2)
-        
-        # Haversine formula
-        dlat = lat2_rad - lat1_rad
-        dlon = lon2_rad - lon1_rad
-        a = (math.sin(dlat/2)**2 + 
-             math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2)
-        c = 2 * math.asin(math.sqrt(a))
-        
-        # Radius of earth in kilometers
-        r = 6371
-        
-        return c * r
-    
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Database lookup failed, using fallback: {e}")
+            return None
+            
     def _get_region_name(self, lat: float, lon: float) -> str:
         """
         Identify region based on coordinate boundaries.

@@ -6,7 +6,7 @@ import os
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app
 from src.app import db, csrf
-from src.models import User, Device, LogbookEntry, Pilot
+from src.models import User, Device, LogbookEntry, Pilot, Airfield
 from src.services.thingsboard_sync import ThingsBoardSyncService
 from src.services.email_service import EmailService
 
@@ -297,3 +297,392 @@ def health_check():
         'service': 'KanardiaCloud API',
         'version': '1.0.0'
     }), 200
+
+
+@api_bp.route('/external/airfields', methods=['POST'])
+@csrf.exempt
+@require_api_key
+def add_or_update_airfield():
+    """
+    Add or update airfield data in the database.
+    
+    Expected JSON payload:
+    {
+        "icao_code": "LJLJ",
+        "name": "Ljubljana Airport", 
+        "latitude": 46.2237,
+        "longitude": 14.4576,
+        "country": "Slovenia",
+        "region": "Central Europe",
+        "elevation_ft": 1273,
+        "runway_info": {...},
+        "frequencies": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'error': 'Invalid request',
+                'message': 'JSON payload required'
+            }), 400
+        
+        # Validate required fields
+        required_fields = ['icao_code', 'name', 'latitude', 'longitude']
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            return jsonify({
+                'error': 'Missing required fields',
+                'message': f'Required fields: {", ".join(missing_fields)}'
+            }), 400
+        
+        # Validate ICAO code format
+        icao_code = data['icao_code'].upper()
+        if len(icao_code) != 4 or not icao_code.isalpha():
+            return jsonify({
+                'error': 'Invalid ICAO code',
+                'message': 'ICAO code must be 4 letters'
+            }), 400
+        
+        # Validate coordinates
+        try:
+            latitude = float(data['latitude'])
+            longitude = float(data['longitude'])
+            
+            if not (-90 <= latitude <= 90):
+                raise ValueError("Latitude must be between -90 and 90")
+            if not (-180 <= longitude <= 180):
+                raise ValueError("Longitude must be between -180 and 180")
+                
+        except (ValueError, TypeError) as e:
+            return jsonify({
+                'error': 'Invalid coordinates',
+                'message': str(e)
+            }), 400
+        
+        # Check if airfield already exists
+        existing_airfield = Airfield.query.filter_by(icao_code=icao_code).first()
+        
+        if existing_airfield:
+            # Update existing airfield
+            existing_airfield.name = data['name']
+            existing_airfield.latitude = latitude
+            existing_airfield.longitude = longitude
+            existing_airfield.country = data.get('country')
+            existing_airfield.region = data.get('region')
+            existing_airfield.elevation_ft = data.get('elevation_ft')
+            existing_airfield.runway_info = data.get('runway_info')
+            existing_airfield.frequencies = data.get('frequencies')
+            existing_airfield.is_active = data.get('is_active', True)
+            
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'updated',
+                'message': f'Airfield {icao_code} updated successfully',
+                'airfield': existing_airfield.to_dict()
+            }), 200
+            
+        else:
+            # Create new airfield
+            airfield = Airfield(
+                icao_code=icao_code,
+                name=data['name'],
+                latitude=latitude,
+                longitude=longitude,
+                country=data.get('country'),
+                region=data.get('region'),
+                elevation_ft=data.get('elevation_ft'),
+                runway_info=data.get('runway_info'),
+                frequencies=data.get('frequencies'),
+                is_active=data.get('is_active', True)
+            )
+            
+            db.session.add(airfield)
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'created',
+                'message': f'Airfield {icao_code} created successfully',
+                'airfield': airfield.to_dict()
+            }), 201
+            
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error managing airfield: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': 'Failed to process airfield data'
+        }), 500
+
+
+@api_bp.route('/external/airfields/bulk', methods=['POST'])
+@csrf.exempt
+@require_api_key
+def bulk_add_airfields():
+    """
+    Bulk add or update multiple airfields.
+    
+    Expected JSON payload:
+    {
+        "airfields": [
+            {
+                "icao_code": "LJLJ",
+                "name": "Ljubljana Airport",
+                "latitude": 46.2237,
+                "longitude": 14.4576,
+                "country": "Slovenia"
+            },
+            ...
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'airfields' not in data:
+            return jsonify({
+                'error': 'Invalid request',
+                'message': 'JSON payload with "airfields" array required'
+            }), 400
+        
+        airfields_data = data['airfields']
+        if not isinstance(airfields_data, list):
+            return jsonify({
+                'error': 'Invalid format',
+                'message': 'airfields must be an array'
+            }), 400
+        
+        results = {
+            'created': 0,
+            'updated': 0,
+            'errors': []
+        }
+        
+        for i, airfield_data in enumerate(airfields_data):
+            try:
+                # Validate required fields
+                required_fields = ['icao_code', 'name', 'latitude', 'longitude']
+                missing_fields = [field for field in required_fields if field not in airfield_data]
+                
+                if missing_fields:
+                    results['errors'].append({
+                        'index': i,
+                        'icao_code': airfield_data.get('icao_code', 'unknown'),
+                        'error': f'Missing required fields: {", ".join(missing_fields)}'
+                    })
+                    continue
+                
+                icao_code = airfield_data['icao_code'].upper()
+                
+                # Validate coordinates
+                latitude = float(airfield_data['latitude'])
+                longitude = float(airfield_data['longitude'])
+                
+                # Check if airfield exists
+                existing_airfield = Airfield.query.filter_by(icao_code=icao_code).first()
+                
+                if existing_airfield:
+                    # Update existing
+                    existing_airfield.name = airfield_data['name']
+                    existing_airfield.latitude = latitude
+                    existing_airfield.longitude = longitude
+                    existing_airfield.country = airfield_data.get('country')
+                    existing_airfield.region = airfield_data.get('region')
+                    existing_airfield.elevation_ft = airfield_data.get('elevation_ft')
+                    existing_airfield.runway_info = airfield_data.get('runway_info')
+                    existing_airfield.frequencies = airfield_data.get('frequencies')
+                    existing_airfield.is_active = airfield_data.get('is_active', True)
+                    
+                    results['updated'] += 1
+                else:
+                    # Create new
+                    airfield = Airfield(
+                        icao_code=icao_code,
+                        name=airfield_data['name'],
+                        latitude=latitude,
+                        longitude=longitude,
+                        country=airfield_data.get('country'),
+                        region=airfield_data.get('region'),
+                        elevation_ft=airfield_data.get('elevation_ft'),
+                        runway_info=airfield_data.get('runway_info'),
+                        frequencies=airfield_data.get('frequencies'),
+                        is_active=airfield_data.get('is_active', True)
+                    )
+                    db.session.add(airfield)
+                    results['created'] += 1
+                    
+            except (ValueError, TypeError, KeyError) as e:
+                results['errors'].append({
+                    'index': i,
+                    'icao_code': airfield_data.get('icao_code', 'unknown'),
+                    'error': str(e)
+                })
+                continue
+        
+        # Commit all changes
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'completed',
+            'message': f'Processed {len(airfields_data)} airfields',
+            'results': results
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error in bulk airfield operation: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': 'Failed to process bulk airfield data'
+        }), 500
+
+
+@api_bp.route('/external/airfields', methods=['GET'])
+@csrf.exempt
+@require_api_key
+def get_airfields():
+    """
+    Get list of airfields with optional filtering.
+    
+    Query parameters:
+    - country: Filter by country
+    - region: Filter by region  
+    - icao_code: Get specific airfield
+    - lat, lon, radius_km: Find airfields near coordinates
+    """
+    try:
+        # Get query parameters
+        country = request.args.get('country')
+        region = request.args.get('region')
+        icao_code = request.args.get('icao_code')
+        lat = request.args.get('lat')
+        lon = request.args.get('lon')
+        radius_km = request.args.get('radius_km', 25.0, type=float)
+        
+        query = Airfield.query.filter_by(is_active=True)
+        
+        # Apply filters
+        if icao_code:
+            query = query.filter_by(icao_code=icao_code.upper())
+        if country:
+            query = query.filter_by(country=country)
+        if region:
+            query = query.filter_by(region=region)
+        
+        # Handle proximity search
+        if lat is not None and lon is not None:
+            try:
+                latitude = float(lat)
+                longitude = float(lon)
+                
+                # Use database method for proximity search
+                results = Airfield.find_nearest(latitude, longitude, radius_km, limit=50)
+                airfields = [airfield.to_dict() for airfield, distance in results]
+                
+                return jsonify({
+                    'airfields': airfields,
+                    'total': len(airfields),
+                    'search_params': {
+                        'latitude': latitude,
+                        'longitude': longitude,
+                        'radius_km': radius_km
+                    }
+                }), 200
+                
+            except (ValueError, TypeError):
+                return jsonify({
+                    'error': 'Invalid coordinates',
+                    'message': 'lat and lon must be valid numbers'
+                }), 400
+        else:
+            # Regular query
+            airfields = query.all()
+            
+            return jsonify({
+                'airfields': [airfield.to_dict() for airfield in airfields],
+                'total': len(airfields)
+            }), 200
+            
+    except Exception as e:
+        current_app.logger.error(f"Error getting airfields: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': 'Failed to retrieve airfield data'
+        }), 500
+
+
+@api_bp.route('/external/geocode', methods=['POST'])
+@csrf.exempt
+@require_api_key
+def reverse_geocode_api():
+    """
+    Reverse geocode coordinates using aviation database.
+    
+    Expected JSON payload:
+    {
+        "latitude": 46.2237,
+        "longitude": 14.4576
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'error': 'Invalid request',
+                'message': 'JSON payload required'
+            }), 400
+        
+        if 'latitude' not in data or 'longitude' not in data:
+            return jsonify({
+                'error': 'Missing coordinates',
+                'message': 'latitude and longitude required'
+            }), 400
+        
+        try:
+            latitude = float(data['latitude'])
+            longitude = float(data['longitude'])
+        except (ValueError, TypeError):
+            return jsonify({
+                'error': 'Invalid coordinates',
+                'message': 'latitude and longitude must be valid numbers'
+            }), 400
+        
+        # Use the geocoding service
+        from src.services.geocoding import reverse_geocode
+        location = reverse_geocode(latitude, longitude)
+        
+        # Get nearest airfield details
+        nearest_airfield = None
+        try:
+            results = Airfield.find_nearest(latitude, longitude, max_distance_km=50.0, limit=1)
+            if results:
+                airfield, distance = results[0]
+                nearest_airfield = {
+                    'icao_code': airfield.icao_code,
+                    'name': airfield.name,
+                    'distance_km': round(distance, 2),
+                    'country': airfield.country,
+                    'region': airfield.region
+                }
+        except Exception as e:
+            current_app.logger.warning(f"Could not get nearest airfield: {e}")
+        
+        return jsonify({
+            'location': location,
+            'coordinates': {
+                'latitude': latitude,
+                'longitude': longitude
+            },
+            'nearest_airfield': nearest_airfield
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in reverse geocoding: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': 'Failed to process geocoding request'
+        }), 500
