@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<style>
+    /* Simple map styling */
+    #airfields-map {
+        height: 500px;
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+    }
+    
+    .map-container {
+        margin-bottom: 1rem;
+        width: 100%;
+    }
+    
+    /* Loading spinner styles */
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        text-align: center;
+        color: #666;
+    }
+    
+    .leaflet-popup-content {
+        margin: 8px 12px;
+        line-height: 1.4;
+    }
+    
+    .airfield-info {
+        min-width: 200px;
+    }
+    
+    .airfield-info h6 {
+        margin-bottom: 0.5rem;
+        color: #0d6efd;
+    }
+    
+    .airfield-info .badge {
+        font-size: 0.7em;
+    }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stats-section {
+        background-color: #e3f2fd;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+</style>
+<div class="page-header">
+    <h1><span class="material-icons">flight_takeoff</span> Airfields Map</h1>
+    <div>
+        <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-secondary">
+            <span class="material-icons me-2">arrow_back</span> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="stats-section">
+    <div class="row text-center">
+        <div class="col-md-3">
+            <h4 class="mb-1">{{ airfields|length }}</h4>
+            <small class="text-muted">Airfields Shown</small>
+        </div>
+        <div class="col-md-3">
+            <h4 class="mb-1">{{ countries|length }}</h4>
+            <small class="text-muted">Countries</small>
+        </div>
+        <div class="col-md-6">
+            <small class="text-muted">Click on map markers to see airfield details</small>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filter -->
+<div class="filter-section">
+    <form method="GET" class="row g-3">
+        <div class="col-md-6">
+            <label for="search" class="form-label">Search</label>
+            <input type="text" class="form-control" id="search" name="search" 
+                   value="{{ search }}" placeholder="ICAO code, name, or country">
+        </div>
+        <div class="col-md-4">
+            <label for="country" class="form-label">Country</label>
+            <select class="form-select" id="country" name="country">
+                <option value="">All Countries</option>
+                {% for country in countries %}
+                <option value="{{ country }}" {% if country == country_filter %}selected{% endif %}>
+                    {{ country }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary me-2">
+                <span class="material-icons">search</span>
+            </button>
+            <a href="{{ url_for('dashboard.airfields') }}" class="btn btn-outline-secondary">
+                <span class="material-icons">clear</span>
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Map -->
+<div class="map-container">
+    <div id="airfields-map">
+        <div class="map-loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading map...</span>
+            </div>
+            <p class="mt-2 mb-0">Loading airfields map...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Airfield List (Table) -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Airfield Details</h5>
+    </div>
+    <div class="card-body">
+        {% if airfields %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>ICAO</th>
+                        <th>Name</th>
+                        <th>Country</th>
+                        <th>Region</th>
+                        <th>Coordinates</th>
+                        <th>Elevation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for airfield in airfields %}
+                    <tr>
+                        <td>
+                            <strong>{{ airfield.icao_code }}</strong>
+                        </td>
+                        <td>{{ airfield.name }}</td>
+                        <td>
+                            <span class="badge bg-secondary">{{ airfield.country or 'Unknown' }}</span>
+                        </td>
+                        <td>{{ airfield.region or '-' }}</td>
+                        <td>
+                            <small class="text-muted">
+                                {{ "%.4f"|format(airfield.latitude) }}, {{ "%.4f"|format(airfield.longitude) }}
+                            </small>
+                        </td>
+                        <td>
+                            {% if airfield.elevation_ft %}
+                                {{ airfield.elevation_ft }} ft
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <span class="material-icons" style="font-size: 3rem; color: #6c757d;">flight_takeoff</span>
+            <p class="text-muted mt-3">No airfields found matching your search criteria.</p>
+            <a href="{{ url_for('dashboard.airfields') }}" class="btn btn-primary">Show All Airfields</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+
+<!-- Leaflet JavaScript -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing airfields map...');
+    
+    // Initialize the map
+    var map = L.map('airfields-map').setView([46.5, 15.0], 7);
+    
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    
+    // Remove loading spinner
+    var loadingDiv = document.querySelector('#airfields-map .map-loading');
+    if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+    }
+    
+    // Get airfields data from the template
+    var airfieldsData = {{ airfields_json|safe }};
+    console.log('Airfields data:', airfieldsData);
+    
+    if (airfieldsData && Array.isArray(airfieldsData) && airfieldsData.length > 0) {
+        // Create marker group
+        var markersGroup = L.featureGroup().addTo(map);
+        
+        // Add markers for each airfield
+        airfieldsData.forEach(function(airfield) {
+            if (airfield.latitude && airfield.longitude) {
+                try {
+                    var marker = L.marker([airfield.latitude, airfield.longitude])
+                        .bindPopup('<div class="text-center">' +
+                            '<strong>' + airfield.icao_code + '</strong><br>' +
+                            airfield.name + '<br>' +
+                            '<small class="text-muted">' + airfield.country + '</small>' +
+                            '</div>');
+                    
+                    markersGroup.addLayer(marker);
+                } catch (e) {
+                    console.error('Error creating marker for airfield:', airfield.icao_code, e);
+                }
+            }
+        });
+        
+        // Fit map to show all markers
+        if (markersGroup.getLayers().length > 0) {
+            try {
+                var group = new L.featureGroup(markersGroup.getLayers());
+                map.fitBounds(group.getBounds(), {
+                    padding: [20, 20],
+                    maxZoom: 12
+                });
+            } catch (e) {
+                console.error('Error fitting bounds:', e);
+            }
+        }
+        
+        console.log('Added', markersGroup.getLayers().length, 'airfield markers');
+    } else {
+        console.warn('No airfields data found or data is empty');
+    }
+    
+    // Simple size invalidation after DOM is ready
+    setTimeout(function() {
+        map.invalidateSize();
+    }, 100);
+});
+</script>
+
+{% endblock %}

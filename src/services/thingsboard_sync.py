@@ -2208,7 +2208,7 @@ class ThingsBoardSyncService:
             # Geocode departure airport from first point
             departure_location = geocoder.get_nearest_airfield(first_point.latitude, first_point.longitude)
             if departure_location:
-                departure_icao = departure_location.get('icao', 'UNKN')
+                departure_icao = departure_location.get('icao_code', 'UNKN')
                 logger.debug(f"Departure airport for logbook entry {logbook_entry.id}: {departure_icao}")
                 
                 # Update logbook entry if it's currently unknown or generic
@@ -2218,7 +2218,7 @@ class ThingsBoardSyncService:
             # Geocode arrival airport from last point
             arrival_location = geocoder.get_nearest_airfield(last_point.latitude, last_point.longitude)
             if arrival_location:
-                arrival_icao = arrival_location.get('icao', 'UNKN')
+                arrival_icao = arrival_location.get('icao_code', 'UNKN')
                 logger.debug(f"Arrival airport for logbook entry {logbook_entry.id}: {arrival_icao}")
                 
                 # Update logbook entry if it's currently unknown or generic

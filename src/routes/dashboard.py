@@ -13,7 +13,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from flask_wtf.csrf import validate_csrf
 from src.app import db
-from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event, FlightPoint
+from src.models import Device, Checklist, InstrumentLayout, ApproachChart, LogbookEntry, InitialLogbookTime, Pilot, Event, FlightPoint, Airfield
 from src.forms import DeviceForm, ChecklistForm, ChecklistCreateForm, ChecklistImportForm, InstrumentLayoutForm, InstrumentLayoutCreateForm, InstrumentLayoutImportForm, LogbookEntryForm, InitialLogbookTimeForm, DevicePilotMappingForm
 from src.services.thingsboard_sync import ThingsBoardSyncService
 import json
@@ -313,6 +313,9 @@ def index():
     totals = calculate_logbook_totals(current_user.id)
     total_flight_time = totals['total_time']
     
+    # Get airfield count
+    airfield_count = Airfield.query.filter_by(is_active=True).count()
+    
     return render_template('dashboard/index.html', 
                          title='Dashboard',
                          device_count=device_count,
@@ -322,6 +325,7 @@ def index():
                          pilot_mapping_count=pilot_mapping_count,
                          recent_entries=recent_entries,
                          total_flight_time=total_flight_time,
+                         airfield_count=airfield_count,
                          totals=totals)
 
 
@@ -2176,3 +2180,134 @@ def serve_thumbnail(filename):
     from flask import send_from_directory
     thumbnails_dir = os.path.join(current_app.static_folder, 'thumbnails', 'instrument_layouts')
     return send_from_directory(thumbnails_dir, filename)
+
+
+# Airfields Management Routes
+@dashboard_bp.route('/airfields')
+@login_required  
+def airfields():
+    """Dashboard view of all airfields with map visualization."""
+    # Get search and filter parameters
+    search = request.args.get('search', '').strip()
+    country_filter = request.args.get('country', '').strip()
+    
+    # Base query for active airfields
+    query = Airfield.query.filter_by(is_active=True)
+    
+    # Apply search filter
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Airfield.icao_code.ilike(search_term)) |
+            (Airfield.name.ilike(search_term)) |
+            (Airfield.country.ilike(search_term))
+        )
+    
+    # Apply country filter
+    if country_filter:
+        query = query.filter(Airfield.country.ilike(f"%{country_filter}%"))
+    
+    # Get all airfields for map display (limited to 1000 for performance)
+    airfields = query.order_by(Airfield.icao_code.asc()).limit(1000).all()
+    
+    # Get distinct countries for filter dropdown
+    countries = db.session.query(Airfield.country.distinct().label('country'))\
+        .filter(Airfield.country.isnot(None))\
+        .filter(Airfield.is_active == True)\
+        .order_by('country').all()
+    
+    countries = [c.country for c in countries]
+    
+    # Convert airfields to JSON for map
+    airfields_json = []
+    for airfield in airfields:
+        airfields_json.append({
+            'icao_code': airfield.icao_code,
+            'name': airfield.name,
+            'latitude': airfield.latitude,
+            'longitude': airfield.longitude,
+            'country': airfield.country,
+            'region': airfield.region,
+            'elevation_ft': airfield.elevation_ft
+        })
+    
+    return render_template('dashboard/airfields.html', 
+                         airfields=airfields,
+                         airfields_json=json.dumps(airfields_json),
+                         search=search,
+                         country_filter=country_filter,
+                         countries=countries,
+                         title='Airfields Map')
+
+
+@dashboard_bp.route('/api/airfields')
+@login_required
+def api_airfields():
+    """API endpoint for airfield data."""
+    # Get search and filter parameters
+    search = request.args.get('search', '').strip()
+    country = request.args.get('country', '').strip()
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    radius_km = request.args.get('radius_km', type=float)
+    
+    # Base query for active airfields
+    query = Airfield.query.filter_by(is_active=True)
+    
+    # Apply search filter
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Airfield.icao_code.ilike(search_term)) |
+            (Airfield.name.ilike(search_term)) |
+            (Airfield.country.ilike(search_term))
+        )
+    
+    # Apply country filter
+    if country:
+        query = query.filter(Airfield.country.ilike(f"%{country}%"))
+    
+    # Geographic proximity search
+    if lat is not None and lon is not None and radius_km:
+        # Use Haversine formula for distance calculation
+        # Note: This is a simplified implementation
+        lat_rad = float(lat)
+        lon_rad = float(lon) 
+        radius = float(radius_km)
+        
+        # Add distance calculation using SQLAlchemy
+        # For simplicity, we'll do a rough lat/lon box filter first
+        lat_delta = radius / 111.0  # Rough conversion: 1 degree ≈ 111 km
+        lon_delta = radius / (111.0 * abs(lat_rad) if lat_rad != 0 else 111.0)
+        
+        query = query.filter(
+            (Airfield.latitude.between(lat_rad - lat_delta, lat_rad + lat_delta)) &
+            (Airfield.longitude.between(lon_rad - lon_delta, lon_rad + lon_delta))
+        )
+    
+    airfields = query.order_by(Airfield.icao_code.asc()).limit(500).all()
+    
+    # Convert to JSON
+    result = []
+    for airfield in airfields:
+        result.append({
+            'icao_code': airfield.icao_code,
+            'name': airfield.name,
+            'latitude': airfield.latitude,
+            'longitude': airfield.longitude,
+            'country': airfield.country,
+            'region': airfield.region,
+            'elevation_ft': airfield.elevation_ft,
+            'source': airfield.source
+        })
+    
+    return jsonify({
+        'airfields': result,
+        'count': len(result)
+    })
+
+
+@dashboard_bp.route('/test-map')
+def test_map():
+    """Simple map test page."""
+    return render_template('test_map.html')
