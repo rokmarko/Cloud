@@ -101,10 +101,11 @@ class NotamService:
                     stats['errors'].append(str(e))
             
             # Mark NOTAMs as expired if they're not in the current fetch
+            now_naive = datetime.now(timezone.utc).replace(tzinfo=None)  # Convert to naive UTC for comparison
             for notam_id, notam in existing_notams.items():
                 if notam_id not in current_notam_ids:
                     # Check if it's actually expired or just not in current data
-                    if notam.valid_until and notam.valid_until < datetime.now(timezone.utc):
+                    if notam.valid_until and notam.valid_until < now_naive:
                         # Already expired, keep as is
                         continue
                     # Otherwise, we might want to keep it active
@@ -143,7 +144,9 @@ class NotamService:
         if notam_data.get('valid_from'):
             try:
                 if isinstance(notam_data['valid_from'], str):
-                    valid_from = datetime.fromisoformat(notam_data['valid_from'].replace('Z', '+00:00'))
+                    # Parse ISO format and convert to naive datetime for database storage
+                    dt = datetime.fromisoformat(notam_data['valid_from'].replace('Z', '+00:00'))
+                    valid_from = dt.replace(tzinfo=None)  # Store as naive UTC
             except Exception as e:
                 logger.warning(f"Could not parse valid_from: {notam_data['valid_from']}")
         
@@ -153,7 +156,9 @@ class NotamService:
             else:
                 try:
                     if isinstance(notam_data['valid_until'], str):
-                        valid_until = datetime.fromisoformat(notam_data['valid_until'].replace('Z', '+00:00'))
+                        # Parse ISO format and convert to naive datetime for database storage
+                        dt = datetime.fromisoformat(notam_data['valid_until'].replace('Z', '+00:00'))
+                        valid_until = dt.replace(tzinfo=None)  # Store as naive UTC
                 except Exception as e:
                     logger.warning(f"Could not parse valid_until: {notam_data['valid_until']}")
         
@@ -161,7 +166,8 @@ class NotamService:
         created_time = None
         if notam_data.get('created', {}).get('iso'):
             try:
-                created_time = datetime.fromisoformat(notam_data['created']['iso'].replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(notam_data['created']['iso'].replace('Z', '+00:00'))
+                created_time = dt.replace(tzinfo=None)  # Store as naive UTC
             except Exception as e:
                 logger.warning(f"Could not parse created time: {notam_data['created']}")
         
