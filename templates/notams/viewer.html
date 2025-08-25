@@ -1,0 +1,629 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="material-icons">announcement</i> NOTAM Viewer</h2>
+            <p class="text-muted">View Notice to Airmen (NOTAM) information</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="material-icons">info</i> Total NOTAMs</h5>
+                    <h3 id="totalNotams">-</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="material-icons">check_circle</i> Active</h5>
+                    <h3 id="activeNotams">-</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="material-icons">warning</i> Critical</h5>
+                    <h3 id="criticalNotams">-</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="material-icons">update</i> Last Update</h5>
+                    <p id="lastUpdate">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="material-icons">filter_alt</i> Filters</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="icaoSelect" class="form-label">Area:</label>
+                    <select class="form-select" id="icaoSelect">
+                        <option value="">All Areas</option>
+                        {% for code in icao_codes %}
+                        <option value="{{ code }}">{{ code }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="dateSelect" class="form-label">Date:</label>
+                    <input type="date" class="form-control" id="dateSelect" value="{{ today }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="statusSelect" class="form-label">Status:</label>
+                    <select class="form-select" id="statusSelect">
+                        <option value="">All Status</option>
+                        <option value="active">Active Only</option>
+                        <option value="inactive">Inactive Only</option>
+                        <option value="permanent">Permanent Only</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="typeSelect" class="form-label">Type:</label>
+                    <select class="form-select" id="typeSelect">
+                        <option value="">All Types</option>
+                        <option value="runway">Runway</option>
+                        <option value="airspace">Airspace</option>
+                        <option value="navigation">Navigation</option>
+                        <option value="facility">Facility</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs" id="notamTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="table-tab" data-bs-toggle="tab" data-bs-target="#table-pane" 
+                    type="button" role="tab" aria-controls="table-pane" aria-selected="true">
+                <i class="material-icons">view_list</i> Table View
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="map-tab" data-bs-toggle="tab" data-bs-target="#map-pane" 
+                    type="button" role="tab" aria-controls="map-pane" aria-selected="false">
+                <i class="material-icons">map</i> Map View
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="notamTabContent">
+        <!-- Table View -->
+        <div class="tab-pane fade show active" id="table-pane" role="tabpanel" aria-labelledby="table-tab">
+            <div class="card mt-3">
+                <div class="card-header">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h5 class="mb-0">NOTAM List</h5>
+                        </div>
+                        <div class="col-auto">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="searchInput" placeholder="Search NOTAMs...">
+                                <button class="btn btn-outline-secondary" type="button" id="searchButton">
+                                    <i class="material-icons">search</i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Loading Spinner -->
+                    <div id="loadingSpinner" class="text-center py-4" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading NOTAMs...</p>
+                    </div>
+                    
+                    <!-- NOTAM Table -->
+                    <div class="table-responsive" id="notamTable">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Area</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Valid From</th>
+                                    <th>Valid Until</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="notamTableBody">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- No NOTAMs Message -->
+                    <div id="noNotams" class="text-center py-4 d-none">
+                        <i class="material-icons" style="font-size: 64px; color: #ccc;">flight_takeoff</i>
+                        <h5 class="text-muted">No NOTAMs found</h5>
+                        <p class="text-muted">Try adjusting your filters or date selection.</p>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <nav aria-label="NOTAM pagination">
+                        <ul class="pagination justify-content-center" id="notamPagination">
+                            <!-- Dynamic pagination -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Map View -->
+        <div class="tab-pane fade" id="map-pane" role="tabpanel" aria-labelledby="map-tab">
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0">NOTAM Map</h5>
+                </div>
+                <div class="card-body">
+                    <div id="notamMap" style="height: 500px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center;">
+                        <div class="text-center">
+                            <i class="material-icons" style="font-size: 64px; color: #ccc;">map</i>
+                            <p class="text-muted mt-2">Map view will be implemented soon</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- NOTAM Detail Modal -->
+<div class="modal fade" id="notamModal" tabindex="-1" aria-labelledby="notamModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="notamModalTitle">NOTAM Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="notamModalBody">
+                <!-- Dynamic content -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.badge {
+    font-size: 0.75rem;
+}
+
+.notam-row:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+.notam-critical {
+    border-left: 4px solid #dc3545;
+}
+
+.notam-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.notam-info {
+    border-left: 4px solid #0dcaf0;
+}
+
+.text-truncate-notam {
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 767.98px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .text-truncate-notam {
+        max-width: 200px;
+    }
+    
+    #notamMap {
+        height: 400px !important;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let currentNotams = [];
+    let currentPage = 1;
+    const itemsPerPage = 20;
+    
+    // Elements
+    const icaoSelect = document.getElementById('icaoSelect');
+    const dateSelect = document.getElementById('dateSelect');
+    const statusSelect = document.getElementById('statusSelect');
+    const typeSelect = document.getElementById('typeSelect');
+    const searchInput = document.getElementById('searchInput');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const notamTable = document.getElementById('notamTable');
+    const noNotams = document.getElementById('noNotams');
+    const notamTableBody = document.getElementById('notamTableBody');
+    const notamPagination = document.getElementById('notamPagination');
+    
+    // Statistics elements
+    const totalNotamsEl = document.getElementById('totalNotams');
+    const activeNotamsEl = document.getElementById('activeNotams');
+    const criticalNotamsEl = document.getElementById('criticalNotams');
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    
+    // Event listeners
+    if (icaoSelect) icaoSelect.addEventListener('change', loadNotams);
+    if (dateSelect) dateSelect.addEventListener('change', loadNotams);
+    if (statusSelect) statusSelect.addEventListener('change', filterAndDisplayNotams);
+    if (typeSelect) typeSelect.addEventListener('change', filterAndDisplayNotams);
+    if (searchInput) searchInput.addEventListener('input', debounce(filterAndDisplayNotams, 300));
+    
+    // Load initial data
+    loadNotams();
+    loadStatistics();
+    
+    function loadNotams() {
+        showLoading(true);
+        
+        const icao = icaoSelect ? icaoSelect.value : '';
+        const date = dateSelect ? dateSelect.value : '';
+        
+        const params = new URLSearchParams();
+        if (icao) params.append('icao', icao);
+        if (date) params.append('date', date);
+        
+        console.log('Loading NOTAMs with params:', params.toString());
+        
+        fetch(`/notams/api/notams?${params}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                console.log('Loaded NOTAMs:', data);
+                currentNotams = data.notams || [];
+                currentPage = 1;
+                updateStatistics(data);
+                filterAndDisplayNotams();
+            })
+            .catch(error => {
+                console.error('Error loading NOTAMs:', error);
+                showError('Error loading NOTAMs: ' + error.message);
+                currentNotams = [];
+                filterAndDisplayNotams();
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+    }
+    
+    function loadStatistics() {
+        fetch('/notams/api/statistics')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                if (totalNotamsEl) totalNotamsEl.textContent = data.overview.total_notams || 0;
+                if (activeNotamsEl) activeNotamsEl.textContent = data.overview.active_notams || 0;
+                
+                // Find most recent update
+                if (data.recent_updates && data.recent_updates.length > 0 && lastUpdateEl) {
+                    const lastUpdate = new Date(data.recent_updates[0].update_time);
+                    lastUpdateEl.textContent = lastUpdate.toLocaleString();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading statistics:', error);
+            });
+    }
+    
+    function updateStatistics(data) {
+        // Update stats from NOTAM data response
+        if (data.count !== undefined && totalNotamsEl) {
+            totalNotamsEl.textContent = data.count;
+        }
+    }
+    
+    function filterAndDisplayNotams() {
+        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+        const statusFilter = statusSelect ? statusSelect.value : '';
+        const typeFilter = typeSelect ? typeSelect.value : '';
+        
+        let filteredNotams = currentNotams;
+        
+        // Search filter
+        if (searchTerm) {
+            filteredNotams = filteredNotams.filter(notam => 
+                (notam.notam_id && notam.notam_id.toLowerCase().includes(searchTerm)) ||
+                (notam.body && notam.body.toLowerCase().includes(searchTerm)) ||
+                (notam.q_code_meaning && notam.q_code_meaning.toLowerCase().includes(searchTerm)) ||
+                (notam.icao_code && notam.icao_code.toLowerCase().includes(searchTerm))
+            );
+        }
+        
+        // Status filter
+        if (statusFilter) {
+            filteredNotams = filteredNotams.filter(notam => {
+                switch (statusFilter) {
+                    case 'active':
+                        return notam.is_active === true;
+                    case 'inactive':
+                        return notam.is_active === false;
+                    case 'permanent':
+                        return notam.is_permanent === true;
+                    default:
+                        return true;
+                }
+            });
+        }
+        
+        // Type filter (based on Q-code)
+        if (typeFilter) {
+            filteredNotams = filteredNotams.filter(notam => {
+                const qCode = notam.q_code || '';
+                switch (typeFilter) {
+                    case 'runway':
+                        return qCode.startsWith('QMR') || qCode.startsWith('QMA');
+                    case 'airspace':
+                        return qCode.startsWith('QRT') || qCode.startsWith('QRA');
+                    case 'navigation':
+                        return qCode.startsWith('QNA') || qCode.startsWith('QNM');
+                    case 'facility':
+                        return qCode.startsWith('QFA') || qCode.startsWith('QFU');
+                    default:
+                        return true;
+                }
+            });
+        }
+        
+        console.log('Filtered NOTAMs:', filteredNotams.length, 'from', currentNotams.length);
+        
+        // Update critical count
+        const criticalCount = filteredNotams.filter(notam => 
+            notam.q_code && (notam.q_code.startsWith('QMR') || notam.q_code.startsWith('QMA') || notam.q_code.startsWith('QNX'))
+        ).length;
+        if (criticalNotamsEl) criticalNotamsEl.textContent = criticalCount;
+        
+        displayFilteredNotams(filteredNotams);
+    }
+    
+    function displayFilteredNotams(filteredNotams) {
+        if (filteredNotams.length === 0) {
+            if (notamTable) notamTable.classList.add('d-none');
+            if (noNotams) noNotams.classList.remove('d-none');
+            return;
+        }
+        
+        if (noNotams) noNotams.classList.add('d-none');
+        if (notamTable) notamTable.classList.remove('d-none');
+        
+        // Pagination
+        const totalPages = Math.ceil(filteredNotams.length / itemsPerPage);
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const pageNotams = filteredNotams.slice(startIndex, endIndex);
+        
+        // Render table
+        renderNotamTable(pageNotams);
+        renderPagination(totalPages);
+    }
+    
+    function renderNotamTable(notams) {
+        if (!notamTableBody) return;
+        
+        notamTableBody.innerHTML = notams.map(notam => {
+            const validFrom = notam.valid_from ? new Date(notam.valid_from).toLocaleDateString() : 'N/A';
+            const validUntil = notam.is_permanent ? 'Permanent' : 
+                              (notam.valid_until ? new Date(notam.valid_until).toLocaleDateString() : 'N/A');
+            
+            const status = notam.is_active ? 
+                '<span class="badge bg-success">Active</span>' : 
+                '<span class="badge bg-secondary">Inactive</span>';
+            
+            const typeClass = getNotamTypeClass(notam.q_code);
+            const bodyPreview = notam.body ? 
+                (notam.body.length > 100 ? notam.body.substring(0, 100) + '...' : notam.body) : 
+                'No description';
+            
+            return `
+                <tr class="notam-row ${typeClass}" data-notam-id="${notam.notam_id}" onclick="showNotamDetails('${notam.notam_id}')">
+                    <td><strong>${notam.notam_id}</strong></td>
+                    <td><span class="badge bg-primary">${notam.icao_code}</span></td>
+                    <td>
+                        <small class="text-muted">${notam.q_code || 'N/A'}</small><br>
+                        <small>${notam.q_code_meaning || 'Unknown'}</small>
+                    </td>
+                    <td class="text-truncate-notam">${bodyPreview}</td>
+                    <td>${validFrom}</td>
+                    <td>${validUntil}</td>
+                    <td>${status}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); showNotamDetails('${notam.notam_id}')">
+                            <i class="material-icons">info</i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function renderPagination(totalPages) {
+        if (!notamPagination || totalPages <= 1) {
+            if (notamPagination) notamPagination.innerHTML = '';
+            return;
+        }
+        
+        let paginationHtml = '';
+        
+        // Previous button
+        paginationHtml += `
+            <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">Previous</a>
+            </li>
+        `;
+        
+        // Page numbers
+        for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+            paginationHtml += `
+                <li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                </li>
+            `;
+        }
+        
+        // Next button
+        paginationHtml += `
+            <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">Next</a>
+            </li>
+        `;
+        
+        notamPagination.innerHTML = paginationHtml;
+    }
+    
+    function showNotamDetails(notamId) {
+        fetch(`/notams/api/notams/${notamId}`)
+            .then(response => {
+                // Check if response is ok
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Response is not JSON');
+                }
+                
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Populate modal with NOTAM details
+                const modalTitle = document.getElementById('notamModalTitle');
+                const modalBody = document.getElementById('notamModalBody');
+                
+                if (modalTitle) modalTitle.textContent = `NOTAM ${data.notam_id}`;
+                if (modalBody) {
+                    modalBody.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Basic Information</h6>
+                                <p><strong>ID:</strong> ${data.notam_id}</p>
+                                <p><strong>ICAO:</strong> ${data.icao_code}</p>
+                                <p><strong>Q-Code:</strong> ${data.q_code || 'N/A'}</p>
+                                <p><strong>Meaning:</strong> ${data.q_code_meaning || 'Unknown'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Validity</h6>
+                                <p><strong>From:</strong> ${data.valid_from ? new Date(data.valid_from).toLocaleString() : 'N/A'}</p>
+                                <p><strong>Until:</strong> ${data.is_permanent ? 'Permanent' : (data.valid_until ? new Date(data.valid_until).toLocaleString() : 'N/A')}</p>
+                                <p><strong>Status:</strong> 
+                                    ${data.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}
+                                </p>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6>Description</h6>
+                        <p>${data.body || 'No description available'}</p>
+                        ${data.raw_text ? `<hr><h6>Raw NOTAM</h6><pre class="bg-light p-3">${data.raw_text}</pre>` : ''}
+                    `;
+                }
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('notamModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error loading NOTAM details:', error);
+                showError('Error loading NOTAM details: ' + error.message);
+            });
+    }
+    
+    function changePage(page) {
+        if (page < 1) return;
+        currentPage = page;
+        filterAndDisplayNotams();
+    }
+    
+    function getNotamTypeClass(qCode) {
+        if (!qCode) return '';
+        if (qCode.startsWith('QMR') || qCode.startsWith('QMA')) return 'notam-critical';
+        if (qCode.startsWith('QRT') || qCode.startsWith('QRA')) return 'notam-warning';
+        return 'notam-info';
+    }
+    
+    function showLoading(show) {
+        if (loadingSpinner) {
+            loadingSpinner.style.display = show ? 'block' : 'none';
+        }
+    }
+    
+    function showError(message) {
+        // Simple error display - could be enhanced with toast or better UI
+        console.error(message);
+        alert(message);
+    }
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+    
+    // Make functions global for onclick handlers
+    window.changePage = changePage;
+    window.showNotamDetails = showNotamDetails;
+});
+</script>
+
+{% endblock %}

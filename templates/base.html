@@ -674,9 +674,16 @@
                                 </a>
                             </li>
                             <li class="nav-item">
+                                <a class="nav-link {% if request.endpoint and request.endpoint.startswith('notam.') %}active{% endif %}" 
+                                   href="{{ url_for('notam.notam_viewer') }}">
+                                    <span class="material-icons">announcement</span> 
+                                    <span>NOTAMs</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
                                 <a class="nav-link {% if request.endpoint == 'dashboard.my_aircraft_access' %}active{% endif %}" 
                                    href="{{ url_for('dashboard.my_aircraft_access') }}">
-                                    <span class="material-icons">flight</span> 
+                                    <span class="material-icons">airplanemode_active</span> 
                                     <span>My Aircraft</span>
                                 </a>
                             </li>

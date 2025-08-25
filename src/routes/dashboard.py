@@ -23,7 +23,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 @dashboard_bp.route('/settings', methods=['GET', 'POST'])
 @login_required
 def user_settings():
-    """User settings page for configuring preferences like date format."""
+    """User settings page for configuring preferences like date format and home area."""
     if request.method == 'POST':
         try:
             # Validate CSRF token
@@ -33,18 +33,46 @@ def user_settings():
             date_format = request.form.get('date_format', '%Y-%m-%d')
             valid_formats = ['%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y', '%m/%d/%Y']
             
+            # Validate and set home area
+            home_area = request.form.get('home_area', '').strip().upper()
+            valid_areas = ['LJLA', 'EDMM', 'LOVV', 'LHCC', 'LKAA']  # Supported NOTAM areas
+            
+            settings_updated = False
+            
             if date_format in valid_formats:
                 current_user.date_format = date_format
-                db.session.commit()
-                flash('Settings updated successfully.', 'success')
+                settings_updated = True
             else:
                 flash('Invalid date format selected.', 'error')
+            
+            if home_area == '' or home_area in valid_areas:
+                current_user.home_area = home_area if home_area else None
+                settings_updated = True
+            else:
+                flash('Invalid home area selected. Valid areas: LJLA, EDMM, LOVV, LHCC, LKAA', 'error')
+            
+            if settings_updated:
+                db.session.commit()
+                flash('Settings updated successfully.', 'success')
                 
         except Exception as e:
             flash('Invalid request. Please try again.', 'error')
             
         return redirect(url_for('dashboard.user_settings'))
-    return render_template('dashboard/user_settings.html', title='User Settings')
+    
+    # Available options for the form
+    available_areas = [
+        ('', 'No NOTAM notifications'),
+        ('LJLA', 'Ljubljana FIR (Slovenia)'),
+        ('EDMM', 'München FIR (South Germany)'),
+        ('LOVV', 'Wien FIR (Austria)'),
+        ('LHCC', 'Budapest FIR (Hungary)'),
+        ('LKAA', 'Praha FIR (Czech Republic)')
+    ]
+    
+    return render_template('dashboard/user_settings.html', 
+                         title='User Settings',
+                         available_areas=available_areas)
 
 
 def process_thumbnail_base64(base64_data, thumbnail_size=(300, 200)):

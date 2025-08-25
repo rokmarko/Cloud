@@ -100,12 +100,14 @@ def create_app():
     from src.routes.dashboard import dashboard_bp
     from src.routes.api import api_bp
     from src.routes.admin import admin_bp
+    from src.routes.notam_routes import notam_bp
     
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(main_bp)
     app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(notam_bp, url_prefix='/notams')
     
     # Create database tables
     with app.app_context():

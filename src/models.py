@@ -23,6 +23,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
     date_format = db.Column(db.String(20), default="%Y-%m-%d", nullable=False)  # User's preferred date format
+    home_area = db.Column(db.String(4), nullable=True)  # ICAO code for user's home area for NOTAM notifications
     
     # Relationships
     devices = db.relationship('Device', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
@@ -605,6 +606,190 @@ class Event(db.Model):
         events_str = ', '.join(active_events) if active_events else 'None'
         return f'<Event {self.id} Device:{self.device_id} Events:[{events_str}]>'
 
+
+class Notam(db.Model):
+    """NOTAM model for storing Notice to Airmen information."""
+    
+    __tablename__ = 'notams'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    notam_id = db.Column(db.String(20), nullable=False, index=True)  # e.g., A1420/25
+    icao_code = db.Column(db.String(4), nullable=False, index=True)  # e.g., LJLA
+    raw_text = db.Column(db.Text, nullable=False)  # Full NOTAM text
+    
+    # Q-line parsed data
+    fir = db.Column(db.String(4), nullable=True)
+    q_code = db.Column(db.String(10), nullable=True, index=True)
+    q_code_meaning = db.Column(db.String(100), nullable=True)
+    traffic_type = db.Column(db.String(10), nullable=True)
+    purpose = db.Column(db.String(10), nullable=True)
+    scope = db.Column(db.String(10), nullable=True)
+    
+    # Altitude limits
+    lower_limit_raw = db.Column(db.String(10), nullable=True)
+    lower_limit_feet = db.Column(db.Integer, nullable=True)
+    upper_limit_raw = db.Column(db.String(10), nullable=True)
+    upper_limit_feet = db.Column(db.Integer, nullable=True)
+    
+    # Geographic coordinates
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    radius_nm = db.Column(db.Integer, nullable=True)  # Radius in nautical miles
+    
+    # Validity period
+    valid_from = db.Column(db.DateTime(timezone=True), nullable=True)
+    valid_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    is_permanent = db.Column(db.Boolean, default=False)
+    
+    # NOTAM content
+    location = db.Column(db.String(4), nullable=True)  # A) field
+    body = db.Column(db.Text, nullable=True)  # E) field
+    
+    # Altitude text descriptions
+    f_limit_text = db.Column(db.String(100), nullable=True)  # F) field
+    g_limit_text = db.Column(db.String(100), nullable=True)  # G) field
+    
+    # Metadata
+    created_time = db.Column(db.DateTime(timezone=True), nullable=True)  # CREATED field
+    source = db.Column(db.String(50), nullable=True)
+    
+    # System fields
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), 
+                          default=lambda: datetime.now(timezone.utc), 
+                          onupdate=lambda: datetime.now(timezone.utc))
+    
+    # Indexes for efficient querying
+    __table_args__ = (
+        db.Index('idx_notam_icao_date', 'icao_code', 'valid_from'),
+        db.Index('idx_notam_qcode_date', 'q_code', 'valid_from'),
+        db.Index('idx_notam_location', 'latitude', 'longitude'),
+    )
+    
+    def __repr__(self):
+        return f'<Notam {self.notam_id} - {self.icao_code}>'
+    
+    def is_active(self, check_date: datetime = None) -> bool:
+        """Check if NOTAM is currently active."""
+        if check_date is None:
+            check_date = datetime.now(timezone.utc)
+        
+        # Convert to naive datetime for comparison if it's timezone-aware
+        if check_date.tzinfo is not None:
+            check_date = check_date.replace(tzinfo=None)
+        
+        if self.is_permanent:
+            if self.valid_from:
+                return check_date >= self.valid_from
+            return True
+        
+        if not self.valid_from or not self.valid_until:
+            return False
+        
+        return self.valid_from <= check_date <= self.valid_until
+    
+    def distance_from(self, lat: float, lon: float) -> float:
+        """Calculate distance from given coordinates in kilometers."""
+        if not self.latitude or not self.longitude:
+            return float('inf')
+        
+        return self.calculate_distance(lat, lon, self.latitude, self.longitude)
+    
+    @staticmethod
+    def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Calculate distance between two points using Haversine formula."""
+        import math
+        
+        # Convert latitude and longitude from degrees to radians
+        lat1_rad = math.radians(lat1)
+        lon1_rad = math.radians(lon1)
+        lat2_rad = math.radians(lat2)
+        lon2_rad = math.radians(lon2)
+        
+        # Haversine formula
+        dlat = lat2_rad - lat1_rad
+        dlon = lon2_rad - lon1_rad
+        a = (math.sin(dlat/2)**2 + 
+             math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2)
+        c = 2 * math.asin(math.sqrt(a))
+        
+        # Radius of earth in kilometers
+        r = 6371
+        
+        return c * r
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert NOTAM to dictionary for JSON serialization."""
+        return {
+            'id': self.id,
+            'notam_id': self.notam_id,
+            'icao_code': self.icao_code,
+            'q_code': self.q_code,
+            'q_code_meaning': self.q_code_meaning,
+            'traffic_type': self.traffic_type,
+            'purpose': self.purpose,
+            'scope': self.scope,
+            'body': self.body,
+            'location': self.location,
+            'latitude': self.latitude,
+            'longitude': self.longitude,
+            'radius_nm': self.radius_nm,
+            'valid_from': self.valid_from.isoformat() if self.valid_from else None,
+            'valid_until': self.valid_until.isoformat() if self.valid_until else None,
+            'is_permanent': self.is_permanent,
+            'is_active': self.is_active(),
+            'f_limit_text': self.f_limit_text,
+            'g_limit_text': self.g_limit_text,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class NotamUpdateLog(db.Model):
+    """Log table for tracking NOTAM updates and changes."""
+    
+    __tablename__ = 'notam_update_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    icao_code = db.Column(db.String(4), nullable=False, index=True)
+    update_time = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    
+    # Statistics
+    total_notams = db.Column(db.Integer, default=0)
+    new_notams = db.Column(db.Integer, default=0)
+    updated_notams = db.Column(db.Integer, default=0)
+    expired_notams = db.Column(db.Integer, default=0)
+    
+    # Status
+    status = db.Column(db.String(20), default='success')  # success, error, partial
+    error_message = db.Column(db.Text, nullable=True)
+    
+    def __repr__(self):
+        return f'<NotamUpdateLog {self.icao_code} - {self.update_time}>'
+
+
+class NotamNotificationSent(db.Model):
+    """Track which NOTAM notifications have been sent to avoid duplicates."""
+    
+    __tablename__ = 'notam_notifications_sent'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    notam_id = db.Column(db.Integer, db.ForeignKey('notams.id'), nullable=False)
+    sent_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    notification_type = db.Column(db.String(20), default='new')  # new, updated, expired
+    
+    # Relationships
+    user = db.relationship('User', backref='notam_notifications')
+    notam = db.relationship('Notam', backref='notifications_sent')
+    
+    # Unique constraint to prevent duplicate notifications
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'notam_id', 'notification_type', name='unique_user_notam_notification'),
+    )
+    
+    def __repr__(self):
+        return f'<NotamNotificationSent User:{self.user_id} Notam:{self.notam_id}>'
+    
 
 class Airfield(db.Model):
     """ICAO airfield model for geocoding services."""
