@@ -232,8 +232,33 @@
     border-left: 4px solid #0dcaf0;
 }
 
-.text-truncate-notam {
-    max-width: 300px;
+.notam-description {
+    width: 100%;
+    max-width: none;
+    min-height: 2.8em;
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+/* Table column width control */
+.table th:nth-child(1) { width: 12%; } /* ID */
+.table th:nth-child(2) { width: 10%; }  /* Area */
+.table th:nth-child(3) { width: 18%; } /* Type */
+.table th:nth-child(4) { width: 20%; } /* Description */
+.table th:nth-child(5) { width: 15%; } /* Valid From */
+.table th:nth-child(6) { width: 15%; } /* Valid Until */
+.table th:nth-child(7) { width: 8%; }  /* Status */
+.table th:nth-child(8) { width: 2%; }  /* Actions */
+
+/* Ensure other columns stay single line */
+.table td:nth-child(1),
+.table td:nth-child(2),
+.table td:nth-child(5),
+.table td:nth-child(6),
+.table td:nth-child(7),
+.table td:nth-child(8) {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -244,9 +269,16 @@
         font-size: 0.875rem;
     }
     
-    .text-truncate-notam {
-        max-width: 200px;
+    .notam-description {
+        width: 100%;
+        max-width: none;
+        min-height: auto;
     }
+    
+    /* Adjust column widths for mobile */
+    .table th:nth-child(4) { width: 30%; } /* Give more space to description on mobile */
+    .table th:nth-child(5) { width: 18%; } /* Valid From */
+    .table th:nth-child(6) { width: 18%; } /* Valid Until */
     
     #notamMap {
         height: 400px !important;
@@ -462,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const typeClass = getNotamTypeClass(notam.q_code);
             const bodyPreview = notam.body ? 
-                (notam.body.length > 100 ? notam.body.substring(0, 100) + '...' : notam.body) : 
+                (notam.body.length > 150 ? notam.body.substring(0, 150) + '...' : notam.body) : 
                 'No description';
             
             return `
@@ -473,7 +505,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <small class="text-muted">${notam.q_code || 'N/A'}</small><br>
                         <small>${notam.q_code_meaning || 'Unknown'}</small>
                     </td>
-                    <td class="text-truncate-notam">${bodyPreview}</td>
+                    <td class="notam-description">${bodyPreview}</td>
                     <td>${validFrom}</td>
                     <td>${validUntil}</td>
                     <td>${status}</td>
